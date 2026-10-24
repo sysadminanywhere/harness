@@ -2,7 +2,10 @@
   "name": "harness-lab",
   "version": "0.1.0",
   "description": "Local-first project planning workspace with Kanban and desktop apps",
-  "author": "Sysadmin Anywhere",
+  "author": {
+    "name": "Sysadmin Anywhere",
+    "email": "info@sysadminanywhere.com"
+  },
   "private": true,
   "main": "electron/main.js",
   "scripts": {
