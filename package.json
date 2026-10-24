@@ -11,14 +11,15 @@
   "scripts": {
     "start": "node server.js",
     "desktop": "electron .",
-    "check": "node --check app.js && node --check server.js && node --check scripts/test.mjs && node --check electron/main.js",
+    "check": "node --check app.js && node --check server.js && node --check scripts/test.mjs && node --check scripts/create-icons.mjs && node --check electron/main.js",
     "smoke": "node scripts/smoke.mjs",
     "test": "npm run check && node scripts/test.mjs",
+    "prepare:icons": "node scripts/create-icons.mjs",
     "package:pwa": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-pwa.ps1",
     "package:desktop": "npm run package:desktop:win",
-    "package:desktop:win": "electron-builder --win nsis portable --publish never",
-    "package:desktop:linux": "electron-builder --linux AppImage deb --publish never",
-    "package:desktop:mac": "electron-builder --mac dmg zip --publish never"
+    "package:desktop:win": "npm run prepare:icons && electron-builder --win nsis portable --publish never",
+    "package:desktop:linux": "npm run prepare:icons && electron-builder --linux AppImage deb --publish never",
+    "package:desktop:mac": "npm run prepare:icons && electron-builder --mac dmg zip --publish never"
   },
   "devDependencies": {
     "electron": "^38.2.0",
@@ -49,12 +50,14 @@
       "sw.js"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis",
         "portable"
       ]
     },
     "linux": {
+      "icon": "build/icons",
       "category": "Utility",
       "target": [
         "AppImage",
@@ -62,13 +65,20 @@
       ]
     },
     "mac": {
+      "icon": "build/icon.icns",
       "category": "public.app-category.productivity",
       "target": [
         "dmg",
         "zip"
       ]
     },
+    "dmg": {
+      "icon": "build/installer.icns"
+    },
     "nsis": {
+      "installerIcon": "build/installer.ico",
+      "installerHeaderIcon": "build/installer.ico",
+      "uninstallerIcon": "build/installer.ico",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
