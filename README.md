@@ -29,6 +29,27 @@ npm test
 
 The project uses Windows-compatible Node commands and does not require `.sh` scripts.
 
+## Build a PWA release
+
+The repository includes a Windows PowerShell packager and a GitHub Actions release workflow.
+
+To create the same archive locally:
+
+```powershell
+.\scripts\package-pwa.ps1 -Version 0.1.0
+```
+
+The archive is written to `release/harness-lab-pwa-v0.1.0.zip`. It contains the local Node server, the installable PWA shell, the manifest, service worker, application files, license, and release instructions. Local project data, `.harness` state, development artifacts, and secrets are excluded.
+
+To publish automatically, push a version tag:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The `Release Harness Lab PWA` workflow runs `npm test`, packages the PWA on Windows, uploads a workflow artifact, and creates a GitHub Release with the ZIP attached. It can also be started manually from the Actions tab with a version input. The workflow uses the repository's `GITHUB_TOKEN`; no AI or external service API is required.
+
 ## WebStorm, IntelliJ, and VS Code
 
 Open `D:\GitHub\harness` as a project and start the application with an npm configuration:

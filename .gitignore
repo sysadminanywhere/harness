@@ -5,3 +5,4 @@ node_modules/
 data/projects.json
 .harness/
 output/playwright/*.png
+release/

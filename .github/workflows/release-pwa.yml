@@ -1,0 +1,72 @@
+name: Release Harness Lab PWA
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, for example 0.1.0 or v0.1.0'
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate Harness
+        shell: pwsh
+        run: npm test
+
+      - name: Determine release version
+        id: version
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:EVENT_NAME -eq 'push') {
+            $tag = $env:REF_NAME
+          } else {
+            $tag = $env:INPUT_VERSION
+            if (-not $tag.StartsWith('v')) { $tag = "v$tag" }
+          }
+          $version = $tag.TrimStart('v')
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Package installable PWA
+        shell: pwsh
+        run: .\scripts\package-pwa.ps1 -Version '${{ steps.version.outputs.version }}' -OutputDirectory release
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-lab-pwa-${{ steps.version.outputs.version }}
+          path: release/harness-lab-pwa-v${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+
+      - name: Create GitHub Release and attach PWA
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $archive = "release/harness-lab-pwa-v$env:RELEASE_VERSION.zip"
+          gh release create $env:RELEASE_TAG $archive --title "Harness Lab $env:RELEASE_TAG" --generate-notes --target $env:GITHUB_SHA

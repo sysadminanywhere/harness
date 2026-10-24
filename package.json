@@ -2,5 +2,5 @@
   "name": "harness-lab",
   "version": "0.1.0",
   "private": true,
-  "scripts": { "start": "node server.js", "check": "node --check app.js && node --check server.js", "smoke": "node scripts/smoke.mjs", "test": "npm run check && npm run smoke" }
+  "scripts": { "start": "node server.js", "check": "node --check app.js && node --check server.js", "smoke": "node scripts/smoke.mjs", "test": "npm run check && npm run smoke", "package:pwa": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-pwa.ps1" }
 }
