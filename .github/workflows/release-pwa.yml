@@ -117,13 +117,23 @@ jobs:
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release with all packages
+      - name: Create or update GitHub Release with all packages
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           mapfile -t assets < <(find artifacts -maxdepth 1 -type f -print)
-          gh release create "$RELEASE_TAG" "${assets[@]}" \
-            --title "Harness Lab $RELEASE_TAG" \
-            --generate-notes \
-            --target "$GITHUB_SHA"
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets were downloaded" >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; replacing its assets"
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --title "Harness Lab $RELEASE_TAG" \
+              --generate-notes \
+              --target "$GITHUB_SHA"
+          fi

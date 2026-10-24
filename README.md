@@ -79,7 +79,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The `Release Harness Lab PWA` workflow runs `npm test`, packages the PWA on Windows, uploads a workflow artifact, and creates a GitHub Release with the ZIP attached. It can also be started manually from the Actions tab with a version input. The workflow uses the repository's `GITHUB_TOKEN`; no AI or external service API is required.
+The `Release Harness Lab PWA` workflow runs `npm test`, packages the PWA on Windows, uploads a workflow artifact, and creates a GitHub Release with the ZIP attached. It can also be started manually from the Actions tab with a version input. Re-running a version whose GitHub Release already exists updates that release and replaces matching asset names instead of failing on `gh release create`. The workflow uses the repository's `GITHUB_TOKEN`; no AI or external service API is required.
 
 ## WebStorm, IntelliJ, and VS Code
 
