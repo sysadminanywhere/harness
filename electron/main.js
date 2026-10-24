@@ -7,6 +7,12 @@ const { spawn } = require('node:child_process');
 let serverProcess;
 let mainWindow;
 let workspacePath;
+let logPath;
+
+function log(message) {
+  if (!logPath) return;
+  fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${message}\n`);
+}
 
 function copySeedData(workspace) {
   const source = path.join(__dirname, '..', 'data', 'board.json');
@@ -44,6 +50,8 @@ function waitForServer(url, timeoutMs = 15000) {
 
 async function startServer() {
   workspacePath = path.join(app.getPath('userData'), 'workspace');
+  logPath = path.join(app.getPath('userData'), 'harness.log');
+  log(`Starting Harness Lab ${app.getVersion()} packaged=${app.isPackaged}`);
   copySeedData(workspacePath);
   const port = await findFreePort();
   const serverPath = app.isPackaged
@@ -51,15 +59,25 @@ async function startServer() {
     : path.join(__dirname, '..', 'server.js');
   serverProcess = spawn(process.execPath, [serverPath], {
     cwd: path.dirname(serverPath),
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', HARNESS_PORT: String(port), HARNESS_WORKSPACE: workspacePath },
-    stdio: 'ignore',
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      HARNESS_APP_ROOT: app.isPackaged ? path.join(process.resourcesPath, 'app.asar') : path.dirname(serverPath),
+      HARNESS_PORT: String(port),
+      HARNESS_WORKSPACE: workspacePath,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
+  serverProcess.stdout.on('data', (data) => log(`server: ${data.toString().trim()}`));
+  serverProcess.stderr.on('data', (data) => log(`server-error: ${data.toString().trim()}`));
   serverProcess.once('exit', (code) => {
+    log(`Server exited with code ${code}`);
     if (!app.isQuitting && code !== 0) app.quit();
   });
   const url = `http://127.0.0.1:${port}`;
   await waitForServer(url);
+  log(`Server ready at ${url}`);
   return url;
 }
 
@@ -161,6 +179,7 @@ async function createWindow() {
 
 app.whenReady().then(createWindow).catch((error) => {
   console.error(error);
+  log(`Startup error: ${error.stack || error.message}`);
   app.quit();
 });
 

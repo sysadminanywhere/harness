@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFile, execFileSync } = require('node:child_process');
 
-const root = __dirname;
+const root = path.resolve(process.env.HARNESS_APP_ROOT || __dirname);
 const workspaceRoot = path.resolve(process.env.HARNESS_WORKSPACE || root);
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const boardFile = path.join(workspaceRoot, 'data', 'board.json');
