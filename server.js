@@ -165,8 +165,8 @@ function splitCommand(command) {
   return parts.map((part) => part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part);
 }
 function safeEnvironment() {
-  const allowed = new Set(['Path', 'PATH', 'PATHEXT', 'SystemRoot', 'TEMP', 'TMP', 'ComSpec', 'PROCESSOR_ARCHITECTURE', 'PROCESSOR_ARCHITEW6432', 'NODE_PATH']);
-  return Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key)));
+  const allowed = new Set(['path', 'pathext', 'systemroot', 'windir', 'temp', 'tmp', 'comspec', 'psmodulepath', 'programfiles', 'programfiles(x86)', 'programw6432', 'processor_architecture', 'processor_architew6432', 'node_path']);
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase())));
 }
 function executeLocalCommand(project, input, onComplete) {
   const command = String(input.command || '').trim();
