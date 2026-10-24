@@ -1,0 +1,7 @@
+node_modules/
+.playwright-mcp/
+.playwright-cli/
+.idea/
+data/projects.json
+.harness/
+output/playwright/*.png

@@ -1,0 +1,127 @@
+{
+  "columns": [
+    {
+      "id": "inbox",
+      "title": "Идеи",
+      "tone": "muted"
+    },
+    {
+      "id": "ready",
+      "title": "Готово",
+      "tone": "blue"
+    },
+    {
+      "id": "working",
+      "title": "В работе",
+      "tone": "green"
+    },
+    {
+      "id": "review",
+      "title": "Проверка",
+      "tone": "amber"
+    },
+    {
+      "id": "blocked",
+      "title": "Заблокировано",
+      "tone": "red"
+    },
+    {
+      "id": "done",
+      "title": "Завершено",
+      "tone": "done"
+    }
+  ],
+  "cards": [
+    {
+      "id": "card-1",
+      "title": "Сформировать план продукта",
+      "description": "Разложить идею Harness Mission Control на проверяемые шаги.",
+      "status": "ready",
+      "priority": "high",
+      "agent": "Planner",
+      "criteria": [
+        "Есть 5–7 последовательных шагов",
+        "У каждого шага есть критерий готовности"
+      ],
+      "updatedAt": "2026-10-24T00:00:00.000Z"
+    },
+    {
+      "id": "card-2",
+      "title": "Добавить подтверждение перед опасными действиями",
+      "description": "Публикация и удаление должны требовать решения пользователя.",
+      "status": "inbox",
+      "priority": "medium",
+      "agent": "Workspace agent",
+      "criteria": [
+        "Действие останавливается до подтверждения"
+      ],
+      "updatedAt": "2026-10-24T00:00:00.000Z"
+    },
+    {
+      "title": "Уточнить цель и ограничения",
+      "description": "Зафиксировать ожидаемый результат и границы действий агента.",
+      "priority": "high",
+      "status": "ready",
+      "agent": "Planner",
+      "criteria": [
+        "Цель сформулирована",
+        "Ограничения понятны"
+      ],
+      "id": "card-1792827862966-3cbf4cec80e098",
+      "updatedAt": "2026-10-24T07:44:22.966Z"
+    },
+    {
+      "title": "Собрать контекст проекта",
+      "description": "Найти релевантные файлы, решения и предыдущие результаты.",
+      "priority": "medium",
+      "status": "ready",
+      "agent": "Researcher",
+      "criteria": [
+        "Контекст приложен к шагу"
+      ],
+      "id": "card-1792827862967-2a6663a7e7ffa",
+      "updatedAt": "2026-10-24T07:44:22.967Z"
+    },
+    {
+      "title": "Выполнить первый проверяемый результат",
+      "description": "Сделать минимальное изменение и показать его пользователю.",
+      "priority": "high",
+      "status": "ready",
+      "agent": "Builder",
+      "criteria": [
+        "Результат можно проверить"
+      ],
+      "id": "card-1792827862967-6466c2fd5f14e",
+      "updatedAt": "2026-10-24T07:44:22.967Z"
+    },
+    {
+      "title": "Проверить адаптивность",
+      "description": "Проверить доску на мобильном экране.",
+      "priority": "medium",
+      "status": "working",
+      "agent": "Workspace agent",
+      "criteria": [
+        "Результат проверен"
+      ],
+      "updatedAt": "2026-10-24T07:44:35.217Z",
+      "id": "card-1792827870649-1dd4c034d05ec8"
+    }
+  ],
+  "events": [
+    {
+      "type": "suggest-plan",
+      "count": 3,
+      "at": "2026-10-24T07:44:22.967Z"
+    },
+    {
+      "type": "create",
+      "at": "2026-10-24T07:44:30.649Z"
+    },
+    {
+      "type": "move",
+      "cardId": "card-1792827870649-1dd4c034d05ec8",
+      "status": "working",
+      "at": "2026-10-24T07:44:35.217Z"
+    }
+  ]
+}
