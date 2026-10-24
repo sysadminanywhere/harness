@@ -262,7 +262,7 @@ const server = http.createServer((req, res) => {
   fs.readFile(file, (error, data) => { if (error) { res.writeHead(404); return res.end('Not found'); } res.writeHead(200, { 'Content-Type': `${types[path.extname(file)] || 'application/octet-stream'}; charset=utf-8` }); res.end(data); });
 });
 
-let port = 4173;
+let port = Number(process.env.HARNESS_PORT || 4173);
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE' && port < 4193) { console.log(`Port ${port} is in use, trying ${port + 1}...`); port += 1; server.listen(port, '127.0.0.1'); return; }
   console.error(`Cannot start Harness Lab: ${error.message}`); process.exitCode = 1;

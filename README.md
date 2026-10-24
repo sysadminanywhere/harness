@@ -4,6 +4,10 @@ Harness Lab is a local mission-control workspace for planning, executing, and re
 
 All project state is stored locally. Harness does not call external AI APIs and does not require API keys.
 
+## Interface preview
+
+![Harness Lab English interface](docs/harness-lab-en.png)
+
 ## Quick start on Windows
 
 Requirements:
