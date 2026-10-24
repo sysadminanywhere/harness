@@ -23,6 +23,8 @@ const defaultBoard = {
 };
 const controlStatuses = { pause: 'paused', resume: 'working', cancel: 'cancelled', retry: 'ready', complete: 'completed', return: 'working' };
 const staleTaskMs = 30 * 60 * 1000;
+const autoDispatchEnabled = process.env.HARNESS_AUTO_DISPATCH !== 'false';
+const autoDispatchIntervalMs = Number(process.env.HARNESS_AUTO_DISPATCH_INTERVAL_MS || 1500);
 const executorRules = { codex: { priority: 1 }, ide: { priority: 2 }, powershell: { priority: 3 }, cli: { priority: 3 }, human: { priority: 4 } };
 const policyProfiles = {
   safe: { label: 'Строго безопасный', allowAutonomous: true, allowShell: false, allowedAdapters: ['git-status', 'npm-test'] },
@@ -92,7 +94,7 @@ function projectState(project) {
   const status = readJson(path.join(harnessDir, 'status.json'), { status: 'idle' });
   const warnings = jsonFiles.flatMap((file) => { const health = fileHealth(path.join(harnessDir, file)); return health.valid ? [] : [`${file}: ${health.error}`]; });
   if (status.status === 'working' && status.updatedAt && Date.now() - new Date(status.updatedAt).getTime() > staleTaskMs) warnings.push(`Задача ${status.taskId || ''} не обновлялась более 30 минут`);
-  return { project, git: gitInfo(project), policy: projectPolicy(project), health: { readAt: new Date().toISOString(), warnings }, plan: readJson(path.join(harnessDir, 'plan.json'), defaultBoard), status, queue: readJson(path.join(harnessDir, 'queue.json'), []), claims: readJson(claimsPath(project), {}), report: fs.readFileSync(path.join(harnessDir, 'reports', 'latest.md'), 'utf8'), currentTask: fs.readFileSync(path.join(harnessDir, 'current-task.md'), 'utf8'), events: fs.readFileSync(path.join(harnessDir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-100).map(readJsonFromLine) };
+  return { project, git: gitInfo(project), policy: projectPolicy(project), worker: { enabled: autoDispatchEnabled, intervalMs: autoDispatchIntervalMs }, health: { readAt: new Date().toISOString(), warnings }, plan: readJson(path.join(harnessDir, 'plan.json'), defaultBoard), status, queue: readJson(path.join(harnessDir, 'queue.json'), []), claims: readJson(claimsPath(project), {}), report: fs.readFileSync(path.join(harnessDir, 'reports', 'latest.md'), 'utf8'), currentTask: fs.readFileSync(path.join(harnessDir, 'current-task.md'), 'utf8'), events: fs.readFileSync(path.join(harnessDir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-100).map(readJsonFromLine) };
 }
 function readBody(req, callback) { let body = ''; req.on('data', (chunk) => { body += chunk; if (body.length > 1_000_000) req.destroy(); }); req.on('end', () => { try { callback(JSON.parse(body || '{}')); } catch { callback(null); } }); }
 function sendJson(res, status, value) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
@@ -166,6 +168,7 @@ function dispatchNextTask(project) {
   appendEvent(project, { type: 'queue_dispatched', taskId: next.taskId, executor: next.executor, at: new Date().toISOString() });
   return { ...request, dispatched: true, queue };
 }
+function dispatchQueuedProjects() { if (!autoDispatchEnabled) return []; const dispatched = []; for (const project of ensureProjects()) { const status = readJson(path.join(harnessDirFor(project), 'status.json'), { status: 'idle' }); const queue = readJson(path.join(harnessDirFor(project), 'queue.json'), []); if (status.status !== 'working' && queue.length) { const result = dispatchNextTask(project); if (result.dispatched) dispatched.push({ projectId: project.id, taskId: result.taskId }); } } return dispatched; }
 function controlTask(project, input) {
   if (!input?.taskId || !controlStatuses[input.action]) return null;
   const status = { status: controlStatuses[input.action], taskId: input.taskId, title: input.title || '', executor: input.executor || 'codex', updatedAt: new Date().toISOString() };
@@ -303,3 +306,5 @@ server.on('error', (error) => {
 });
 server.on('listening', () => console.log(`Harness Lab: http://localhost:${port}`));
 server.listen(port, '127.0.0.1');
+const queueWorker = setInterval(() => { try { const dispatched = dispatchQueuedProjects(); dispatched.forEach((item) => console.log(`Harness queue worker: ${item.projectId}/${item.taskId}`)); } catch (error) { console.error(`Harness queue worker: ${error.message}`); } }, autoDispatchIntervalMs);
+queueWorker.unref();

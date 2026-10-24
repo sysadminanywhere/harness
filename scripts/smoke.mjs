@@ -20,6 +20,7 @@ if (!Array.isArray(projects) || !projects.some((project) => project.id === 'harn
 const state = await request('/api/projects/harness/state');
 if (!Array.isArray(state.plan?.cards) || !Array.isArray(state.plan?.columns)) throw new Error('Invalid persisted plan');
 if (!state.claims || typeof state.claims !== 'object') throw new Error('Claim state is missing from project state');
+if (!state.worker || state.worker.enabled !== false) throw new Error('Test worker mode is not explicit');
 if (!['idle', 'working', 'paused', 'cancelled', 'completed', 'failed'].includes(state.status?.status)) throw new Error(`Unknown runtime status: ${state.status?.status}`);
 
 const suggestion = await request('/api/projects/harness/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal: 'smoke test' }) });
