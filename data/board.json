@@ -33,6 +33,50 @@
   ],
   "cards": [
     {
+      "id": "global-harness-mission",
+      "title": "Запустить Harness Lab как рабочую систему",
+      "description": "Единая глобальная задача, раскрытая на проверяемые подзадачи по статусам.",
+      "status": "working",
+      "priority": "high",
+      "isGlobal": true,
+      "type": "global",
+      "criteria": ["Все подзадачи распределены и проверены"],
+      "updatedAt": "2026-10-24T12:00:00.000Z"
+    },
+    {
+      "id": "global-harness-subtask-plan",
+      "title": "Разложить глобальную задачу на шаги",
+      "description": "Сформировать структуру подзадач для команды.",
+      "status": "done",
+      "priority": "high",
+      "parentId": "global-harness-mission",
+      "executor": "human",
+      "criteria": ["Подзадачи видны на доске"],
+      "updatedAt": "2026-10-24T12:00:00.000Z"
+    },
+    {
+      "id": "global-harness-subtask-ui",
+      "title": "Показать подзадачи в колонках",
+      "description": "Каждая подзадача должна находиться в своей статусной колонке.",
+      "status": "working",
+      "priority": "high",
+      "parentId": "global-harness-mission",
+      "executor": "codex",
+      "criteria": ["Группа раскрывается и сворачивается"],
+      "updatedAt": "2026-10-24T12:00:00.000Z"
+    },
+    {
+      "id": "global-harness-subtask-verify",
+      "title": "Проверить сценарий раскрытия",
+      "description": "Проверить создание, сворачивание и перемещение подзадачи.",
+      "status": "ready",
+      "priority": "medium",
+      "parentId": "global-harness-mission",
+      "executor": "human",
+      "criteria": ["Сценарий проверен в браузере"],
+      "updatedAt": "2026-10-24T12:00:00.000Z"
+    },
+    {
       "id": "card-1",
       "title": "Сформировать план продукта",
       "description": "Разложить идею Harness Mission Control на проверяемые шаги.",

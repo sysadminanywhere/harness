@@ -24,6 +24,12 @@ const defaultBoard = {
 const controlStatuses = { pause: 'paused', resume: 'working', cancel: 'cancelled', retry: 'ready', complete: 'completed', return: 'working' };
 const staleTaskMs = 30 * 60 * 1000;
 const executorRules = { codex: { priority: 1 }, ide: { priority: 2 }, powershell: { priority: 3 }, cli: { priority: 3 }, human: { priority: 4 } };
+const policyProfiles = {
+  safe: { label: 'Строго безопасный', allowAutonomous: true, allowShell: false, allowedAdapters: ['git-status', 'npm-test'] },
+  development: { label: 'Обычная разработка', allowAutonomous: true, allowShell: true, allowedAdapters: ['git-status', 'npm-test', 'npm-lint', 'npm-build'] },
+  manual: { label: 'Полный ручной контроль', allowAutonomous: false, allowShell: true, allowedAdapters: ['git-status', 'npm-test', 'npm-lint', 'npm-build'] }
+};
+function projectPolicy(project) { const base = policyProfiles[project.policy] || policyProfiles.development; return { ...base, allowedAdapters: Array.isArray(project.allowedAdapters) ? project.allowedAdapters.filter((adapter) => base.allowedAdapters.includes(adapter)) : base.allowedAdapters }; }
 
 function ensureBoard() {
   fs.mkdirSync(path.dirname(boardFile), { recursive: true });
@@ -75,6 +81,10 @@ function gitInfo(project) {
 }
 function readJsonFromLine(line) { try { return JSON.parse(line); } catch { return { type: 'invalid', raw: line }; } }
 function appendEvent(project, event) { fs.appendFileSync(path.join(harnessDirFor(project), 'events.jsonl'), `${JSON.stringify({ ...event, at: new Date().toISOString() })}\n`); }
+const claimTtlMs = 30 * 60 * 1000;
+function claimsPath(project) { return path.join(harnessDirFor(project), 'claims.json'); }
+function claimTask(project, input) { ensureProjectFiles(project); const claims = readJson(claimsPath(project), {}); const now = Date.now(); const current = claims[input.taskId]; if (current && current.claimedBy !== input.claimedBy && now - new Date(current.claimedAt).getTime() < claimTtlMs) return { error: 'Task is already claimed', claim: current }; const claim = { taskId: input.taskId, claimedBy: String(input.claimedBy || 'unknown'), claimedAt: new Date(now).toISOString(), expiresAt: new Date(now + claimTtlMs).toISOString() }; claims[input.taskId] = claim; writeJson(claimsPath(project), claims); appendEvent(project, { type: 'task_claimed', ...claim }); return claim; }
+function releaseTask(project, input) { ensureProjectFiles(project); const claims = readJson(claimsPath(project), {}); const current = claims[input.taskId]; if (current && current.claimedBy !== input.claimedBy) return { error: 'Task is claimed by another agent', claim: current }; delete claims[input.taskId]; writeJson(claimsPath(project), claims); appendEvent(project, { type: 'task_released', taskId: input.taskId, claimedBy: input.claimedBy }); return { released: true, taskId: input.taskId }; }
 function projectState(project) {
   const harnessDir = harnessDirFor(project);
   ensureProjectFiles(project);
@@ -82,7 +92,7 @@ function projectState(project) {
   const status = readJson(path.join(harnessDir, 'status.json'), { status: 'idle' });
   const warnings = jsonFiles.flatMap((file) => { const health = fileHealth(path.join(harnessDir, file)); return health.valid ? [] : [`${file}: ${health.error}`]; });
   if (status.status === 'working' && status.updatedAt && Date.now() - new Date(status.updatedAt).getTime() > staleTaskMs) warnings.push(`Задача ${status.taskId || ''} не обновлялась более 30 минут`);
-  return { project, git: gitInfo(project), health: { readAt: new Date().toISOString(), warnings }, plan: readJson(path.join(harnessDir, 'plan.json'), defaultBoard), status, queue: readJson(path.join(harnessDir, 'queue.json'), []), report: fs.readFileSync(path.join(harnessDir, 'reports', 'latest.md'), 'utf8'), currentTask: fs.readFileSync(path.join(harnessDir, 'current-task.md'), 'utf8'), events: fs.readFileSync(path.join(harnessDir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-100).map(readJsonFromLine) };
+  return { project, git: gitInfo(project), policy: projectPolicy(project), health: { readAt: new Date().toISOString(), warnings }, plan: readJson(path.join(harnessDir, 'plan.json'), defaultBoard), status, queue: readJson(path.join(harnessDir, 'queue.json'), []), claims: readJson(claimsPath(project), {}), report: fs.readFileSync(path.join(harnessDir, 'reports', 'latest.md'), 'utf8'), currentTask: fs.readFileSync(path.join(harnessDir, 'current-task.md'), 'utf8'), events: fs.readFileSync(path.join(harnessDir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-100).map(readJsonFromLine) };
 }
 function readBody(req, callback) { let body = ''; req.on('data', (chunk) => { body += chunk; if (body.length > 1_000_000) req.destroy(); }); req.on('end', () => { try { callback(JSON.parse(body || '{}')); } catch { callback(null); } }); }
 function sendJson(res, status, value) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
@@ -93,6 +103,11 @@ function templatePlan(template) {
     backend: [['Описать API-контракт', 'Зафиксировать входы, выходы и ошибки.', 'high'], ['Реализовать вертикальный срез', 'Сделать один проверяемый endpoint с persistence.', 'high'], ['Добавить тесты', 'Проверить happy path и ошибки.', 'medium']],
     saas: [['Описать роли и тарифы', 'Зафиксировать границы доступа и планов.', 'high'], ['Собрать onboarding', 'Провести пользователя от регистрации до первого результата.', 'medium'], ['Подготовить эксплуатацию', 'Добавить health-check, backup и инструкции запуска.', 'medium']],
     research: [['Сформулировать вопрос', 'Определить результат и критерии исследования.', 'high'], ['Собрать источники', 'Зафиксировать факты и ссылки в контексте проекта.', 'medium'], ['Сделать вывод', 'Собрать проверяемый итог и следующие шаги.', 'medium']],
+    development: [['Уточнить требования', 'Зафиксировать сценарий, границы и критерии готовности.', 'high'], ['Собрать вертикальный срез', 'Реализовать минимальный проверяемый путь от входа до результата.', 'high'], ['Проверить и задокументировать', 'Добавить тесты, инструкции запуска и ограничения.', 'medium']],
+    bug: [['Воспроизвести дефект', 'Зафиксировать шаги, окружение и ожидаемое поведение.', 'high'], ['Найти причину и исправить', 'Локализовать источник проблемы и внести минимальное исправление.', 'high'], ['Добавить регрессионную проверку', 'Проверить исправление и закрепить сценарий тестом.', 'medium']],
+    release: [['Проверить готовность', 'Сверить критерии, миграции, конфигурацию и changelog.', 'high'], ['Собрать и прогнать проверки', 'Выполнить сборку, тесты и smoke-проверку.', 'high'], ['Опубликовать и наблюдать', 'Выполнить релиз и проверить health, логи и откат.', 'medium']],
+    migration: [['Составить карту данных', 'Определить источники, соответствия, ограничения и резервную копию.', 'high'], ['Выполнить пробную миграцию', 'Прогнать миграцию на копии и проверить контрольные суммы.', 'high'], ['Переключить и подтвердить результат', 'Выполнить production-переход и сверить итоговые данные.', 'medium']],
+    security: [['Составить модель угроз', 'Зафиксировать активы, границы доверия и основные риски.', 'high'], ['Проверить защитные меры', 'Провести анализ зависимостей, доступа, секретов и входных данных.', 'high'], ['Оформить исправления и остаточный риск', 'Добавить меры защиты, доказательства и план повторной проверки.', 'medium']],
     game: [['Описать игровой цикл', 'Определить цель игрока, ресурсы и победу.', 'high'], ['Собрать прототип механики', 'Реализовать минимальный playable slice.', 'high'], ['Проверить ощущение игры', 'Провести playtest и записать наблюдения.', 'medium']]
   };
   return { ...defaultBoard, cards: (cards[template] || cards.web).map(([title, description, priority], index) => ({ id: `template-${Date.now()}-${index}`, title, description, priority, status: 'ready', executor: 'codex', criteria: ['Результат проверен'], updatedAt: new Date().toISOString() })) };
@@ -103,6 +118,7 @@ function hasDependencyCycle(plan) {
   function visit(id) { if (visiting.has(id)) return true; if (visited.has(id)) return false; visiting.add(id); const card = cards.get(id); for (const dependency of card?.dependencies || []) if (cards.has(dependency) && visit(dependency)) return true; visiting.delete(id); visited.add(id); return false; }
   return [...cards.keys()].some(visit);
 }
+function updateGlobalStatuses(plan) { const cards = plan.cards || []; cards.filter((card) => card.isGlobal || card.type === 'global').forEach((group) => { const children = cards.filter((card) => card.parentId === group.id); if (!children.length) return; group.status = children.every((card) => card.status === 'done') ? 'done' : children.some((card) => card.status === 'blocked') ? 'blocked' : children.some((card) => ['working', 'review', 'approval'].includes(card.status)) ? 'working' : children.some((card) => card.status === 'ready') ? 'ready' : 'inbox'; }); return plan; }
 function planVersions(project) { const dir = path.join(harnessDirFor(project), 'backups'); ensureProjectFiles(project); return fs.readdirSync(dir).filter((file) => file.startsWith('plan-') && file.endsWith('.bak')).sort().reverse().map((file) => ({ file, createdAt: fs.statSync(path.join(dir, file)).mtime.toISOString() })); }
 function writeTaskRequest(project, input, queued = false) {
   const harnessDir = harnessDirFor(project);
@@ -119,11 +135,16 @@ function createTask(project, input) {
     const queueFile = path.join(harnessDir, 'queue.json');
     const queue = readJson(queueFile, []);
     const request = writeTaskRequest(project, input, true);
-    queue.push({ ...request, description: input.description || '', criteria: input.criteria || [], constraints: input.constraints || '', queuedAt: new Date().toISOString() });
+    queue.push({ ...request, description: input.description || '', criteria: input.criteria || [], plan: input.plan || [], constraints: input.constraints || '', priority: ['high', 'medium', 'low'].includes(input.priority) ? input.priority : 'medium', dueDate: input.dueDate || null, queuedAt: new Date().toISOString() });
     writeJson(queueFile, queue);
     return request;
   }
-  const task = `# Текущая задача\n\n## ${input.title}\n\n${input.description || ''}\n\n## Критерии готовности\n\n${(input.criteria || []).map((item) => `- [ ] ${item}`).join('\n') || '- [ ] Результат проверен'}\n\n## Ограничения\n\n${input.constraints || 'Не менять файлы без проверки.'}\n`;
+  const sourcePlan = Array.isArray(input.plan) && input.plan.length ? input.plan : (readJson(path.join(harnessDir, 'plan.json'), defaultBoard).cards || []).filter((item) => item.parentId === input.taskId);
+  const planItems = sourcePlan.filter((item) => item?.title).map((item, index) => ({ id: item.planKey || item.id || `step-${index + 1}`, title: item.title, description: item.description || '', status: item.status || 'ready', dependsOn: item.dependsOn || item.dependencies || [] }));
+  const plan = planItems.map((item) => `- [ ] [plan:${item.id}] ${item.title}${item.description ? ` — ${item.description}` : ''}`).join('\n');
+  const jsonFence = String.fromCharCode(96).repeat(3);
+  const jsonPlan = planItems.length ? `## План JSON\n\n${jsonFence}json\n${JSON.stringify({ plan: planItems }, null, 2)}\n${jsonFence}\n\n` : '';
+  const task = `# Текущая задача\n\n## ${input.title}\n\n${input.description || ''}\n\n${plan ? `## План\n\n${plan}\n\n` : ''}${jsonPlan}## Критерии готовности\n\n${(input.criteria || []).map((item) => `- [ ] ${item}`).join('\n') || '- [ ] Результат проверен'}\n\n## Ограничения\n\n${input.constraints || 'Не менять файлы без проверки.'}\n`;
   backupFile(path.join(harnessDir, 'current-task.md'), path.join(harnessDir, 'backups'), 'current-task'); writeText(path.join(harnessDir, 'current-task.md'), task);
   const selectedExecutor = executorRules[input.executor] ? input.executor : 'codex';
   const status = { status: 'working', taskId: input.taskId, title: input.title, executor: selectedExecutor, selectedExecutor, updatedAt: new Date().toISOString() };
@@ -136,6 +157,8 @@ function dispatchNextTask(project) {
   if (currentStatus.status === 'working') return { error: 'Current task is still working' };
   const queueFile = path.join(harnessDirFor(project), 'queue.json');
   const queue = readJson(queueFile, []);
+  const priorityRank = { high: 0, medium: 1, low: 2 };
+  queue.sort((a, b) => (priorityRank[a.priority] ?? 1) - (priorityRank[b.priority] ?? 1) || String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31')) || String(a.queuedAt || '').localeCompare(String(b.queuedAt || '')));
   const next = queue.shift();
   writeJson(queueFile, queue);
   if (!next) return { empty: true, queue: [] };
@@ -215,7 +238,8 @@ const server = http.createServer((req, res) => {
     if (projects.some((project) => path.resolve(project.path) === projectPath)) return sendJson(res, 409, { error: 'Проект уже добавлен' });
     let id = slug(name); let suffix = 2;
     while (projects.some((project) => project.id === id)) id = `${slug(name)}-${suffix++}`;
-    const project = { id, name, path: projectPath, template: String(input?.template || 'web'), createdAt: new Date().toISOString() };
+    const policy = policyProfiles[input?.policy] ? input.policy : 'development';
+    const project = { id, name, path: projectPath, template: String(input?.template || 'web'), policy, createdAt: new Date().toISOString() };
     projects.push(project); writeJson(projectsFile, projects); ensureProjectFiles(project); writeJson(path.join(harnessDirFor(project), 'plan.json'), templatePlan(project.template)); return sendJson(res, 201, project);
   });
   const versionsMatch = pathname.match(/^\/api\/projects\/([^/]+)\/plan\/(versions|rollback)$/);
@@ -231,20 +255,29 @@ const server = http.createServer((req, res) => {
       const planFile = path.join(harnessDirFor(project), 'plan.json'); backupFile(planFile, path.join(harnessDirFor(project), 'backups'), 'plan'); writeJson(planFile, plan); appendEvent(project, { type: 'plan_rollback', file: filename }); return sendJson(res, 200, plan);
     });
   }
-  const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)(?:\/(state|plan|task|suggest|command|queue(?:\/next)?))?$/);
+  const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)(?:\/(state|plan|task|suggest|command|claim|release|queue(?:\/next)?))?$/);
   if (projectMatch) {
     const project = getProject(decodeURIComponent(projectMatch[1]));
     if (!project) { res.writeHead(404); return res.end('Project not found'); }
     if (!projectMatch[2] && req.method === 'GET') return sendJson(res, 200, project);
+    if (!projectMatch[2] && req.method === 'PUT') return readBody(req, (input) => { const nextPolicy = policyProfiles[input?.policy] ? input.policy : project.policy || 'development'; const base = policyProfiles[nextPolicy]; const allowedAdapters = Array.isArray(input?.allowedAdapters) ? input.allowedAdapters.filter((adapter) => base.allowedAdapters.includes(adapter)) : project.allowedAdapters; Object.assign(project, { policy: nextPolicy, ...(allowedAdapters ? { allowedAdapters } : {}) }); const projects = readJson(projectsFile, []); const persisted = projects.find((item) => item.id === project.id); if (persisted) Object.assign(persisted, project); writeJson(projectsFile, projects); writeJson(path.join(harnessDirFor(project), 'project.json'), project); appendEvent(project, { type: 'project_policy_updated', policy: nextPolicy, allowedAdapters: projectPolicy(project).allowedAdapters }); return sendJson(res, 200, project); });
     if (!projectMatch[2] && req.method === 'DELETE') { writeJson(projectsFile, ensureProjects().filter((item) => item.id !== project.id)); res.writeHead(204); return res.end(); }
     if (projectMatch[2] === 'state' && req.method === 'GET') return sendJson(res, 200, projectState(project));
+    if (projectMatch[2] === 'claim' && req.method === 'POST') return readBody(req, (input) => { if (!input?.taskId || !input?.claimedBy) return sendJson(res, 400, { error: 'Task and claimant are required' }); const result = claimTask(project, input); return sendJson(res, result.error ? 409 : 200, result); });
+    if (projectMatch[2] === 'release' && req.method === 'POST') return readBody(req, (input) => { if (!input?.taskId || !input?.claimedBy) return sendJson(res, 400, { error: 'Task and claimant are required' }); const result = releaseTask(project, input); return sendJson(res, result.error ? 409 : 200, result); });
     if (projectMatch[2] === 'queue' && req.method === 'GET') return sendJson(res, 200, readJson(path.join(harnessDirFor(project), 'queue.json'), []));
     if (projectMatch[2] === 'queue/next' && req.method === 'POST') { const result = dispatchNextTask(project); return sendJson(res, result.error ? 409 : 200, result); }
-    if (projectMatch[2] === 'plan' && req.method === 'PUT') return readBody(req, (plan) => { if (!plan || !Array.isArray(plan.cards) || !Array.isArray(plan.columns)) { res.writeHead(400); return res.end('Invalid plan'); } if (hasDependencyCycle(plan)) return sendJson(res, 400, { error: 'Dependency cycle detected' }); const planFile = path.join(harnessDirFor(project), 'plan.json'); const currentPlan = readJson(planFile, defaultBoard); const currentRevision = Number(currentPlan.revision || 0); if (plan.revision !== undefined && Number(plan.revision || 0) !== currentRevision) return sendJson(res, 409, { error: 'Plan has changed since it was loaded', revision: currentRevision }); const nextPlan = { ...plan, revision: currentRevision + 1, updatedAt: new Date().toISOString() }; backupFile(planFile, path.join(harnessDirFor(project), 'backups'), 'plan'); writeJson(planFile, nextPlan); appendEvent(project, { type: 'plan_saved', revision: nextPlan.revision }); return sendJson(res, 200, nextPlan); });
+    if (projectMatch[2] === 'plan' && req.method === 'PUT') return readBody(req, (plan) => { if (!plan || !Array.isArray(plan.cards) || !Array.isArray(plan.columns)) { res.writeHead(400); return res.end('Invalid plan'); } if (hasDependencyCycle(plan)) return sendJson(res, 400, { error: 'Dependency cycle detected' }); updateGlobalStatuses(plan); const planFile = path.join(harnessDirFor(project), 'plan.json'); const currentPlan = readJson(planFile, defaultBoard); const currentRevision = Number(currentPlan.revision || 0); if (plan.revision !== undefined && Number(plan.revision || 0) !== currentRevision) return sendJson(res, 409, { error: 'Plan has changed since it was loaded', revision: currentRevision }); const nextPlan = { ...plan, revision: currentRevision + 1, updatedAt: new Date().toISOString() }; backupFile(planFile, path.join(harnessDirFor(project), 'backups'), 'plan'); writeJson(planFile, nextPlan); appendEvent(project, { type: 'plan_saved', revision: nextPlan.revision }); return sendJson(res, 200, nextPlan); });
     if (projectMatch[2] === 'task' && req.method === 'POST') return readBody(req, (input) => { if (!input?.taskId) { res.writeHead(400); return res.end('Invalid task'); } if (input.action) { const request = controlTask(project, input); if (!request) { res.writeHead(400); return res.end('Invalid task action'); } return sendJson(res, 201, request); } if (!input.title) { res.writeHead(400); return res.end('Invalid task'); } return sendJson(res, 201, createTask(project, input)); });
     if (projectMatch[2] === 'command' && req.method === 'POST') return readBody(req, (input) => {
       if (!input?.taskId || (!String(input.command || '').trim() && !adapterDefinitions[input.adapter])) return sendJson(res, 400, { error: 'Task and command are required' });
       const adapter = adapterDefinitions[input.adapter];
+      const executionMode = input.executionMode || input.autonomyMode || 'manual';
+      const policy = projectPolicy(project);
+      if (executionMode === 'auto' && !policy.allowAutonomous) return sendJson(res, 403, { error: `Профиль «${policy.label}» запрещает автономный запуск`, policy: project.policy || 'development' });
+      if (executionMode === 'auto' && !adapter) return sendJson(res, 403, { error: 'Автономный запуск разрешён только для готового адаптера', policy: 'adapter-only', requiresConfirmation: true });
+      if (adapter && !policy.allowedAdapters.includes(input.adapter)) return sendJson(res, 403, { error: `Адаптер ${input.adapter} запрещён профилем проекта`, policy: project.policy || 'development' });
+      if (!adapter && !policy.allowShell && input.dryRun !== true) return sendJson(res, 403, { error: `Профиль «${policy.label}» разрешает только dry-run и готовые адаптеры`, policy: project.policy || 'development' });
       const previewParts = adapter ? [adapter.file, ...adapter.args] : splitCommand(input.command);
       const preview = { taskId: input.taskId, executor: input.executor || 'powershell', adapter: input.adapter || null, command: previewParts.join(' '), cwd: project.path, dryRun: input.dryRun === true, requiresConfirmation: true, allowedEnvironment: ['Path', 'PATHEXT', 'SystemRoot', 'TEMP', 'TMP', 'ComSpec', 'NODE_PATH'] };
       if (input.dryRun === true) { appendEvent(project, { type: 'command_dry_run', source: input.adapter || input.executor || 'powershell', taskId: input.taskId, command: preview.command }); return sendJson(res, 200, preview); }

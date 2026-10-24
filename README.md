@@ -96,6 +96,12 @@ The same file protocol works from WebStorm, IntelliJ IDEA, VS Code, Cursor, a te
 
 - Multiple registered projects with an isolated `.harness` directory for each project.
 - Kanban planning with drag-and-drop, dependencies, cycle detection, priorities, deadlines, estimates, roles, comments, mentions, history, and saved views.
+- Hierarchical global tasks with expandable subtasks distributed across status columns.
+- LLM plan bridge: child tasks are written into `current-task.md` and plans returned by an executor are imported back into the board.
+- Per-card execution mode: `ИИ берет сам` for automatic pickup or `По указанию пользователя`, including drag-to-`В работе` launch.
+- Imported plan items use stable `[plan:<id>]` keys, so executor renames update existing subtasks instead of creating duplicates; global status is derived from child statuses.
+- Executor plans support both Markdown checklists and fenced JSON (`{"plan":[...]}`); `[x]` or `status: "done"` completes the matching subtask, and imports show a confirmation preview before applying changes.
+- Plan imports use a confirmation dialog, and task execution uses a 30-minute claim lease to prevent two agents from running the same card concurrently.
 - Local planning suggestions from the built-in planner; no external AI API is used.
 - Codex, IDE, PowerShell, CLI/script, and human executors using one local contract.
 - Task pause, resume, cancel, retry, review, and completion gates.
@@ -240,6 +246,18 @@ npm test
 ```
 
 `npm test` validates server APIs, file recovery, templates, plan versioning, executor contracts, queue dispatch, PowerShell execution, CLI execution, localization, imports, and the local protocol. Browser flows are verified separately with Playwright.
+
+Карточки могут автоматически захватываться исполнителем или запускаться только по указанию пользователя. Для долгих задач Harness показывает агента и срок аренды захвата, продлевает аренду heartbeat-запросами, пишет захват/освобождение в аудит и позволяет освободить рабочую карточку прямо на доске. При создании проекта доступны шаблоны разработки, дефекта, исследования, релиза, миграции и проверки безопасности.
+
+Если исполнитель уже занят, новые задачи попадают в блок «Входящие для ИИ». При ручном запуске очереди сначала выбирается высокий приоритет, затем ближайший дедлайн и время постановки. Занятая задача не запускается повторно, пока текущий исполнитель не завершён.
+
+Для запуска доступны три политики: «по указанию пользователя», «ИИ предлагает, пользователь подтверждает» и «ИИ берет сам». Сервер дополнительно ограничивает полностью автономный запуск локальных команд готовыми адаптерами; произвольные PowerShell/CLI-команды требуют явного подтверждения.
+
+Политика задаётся для проекта: «Строго безопасный» разрешает только git-status и npm test, «Обычная разработка» разрешает все встроенные адаптеры и подтверждённые команды, «Полный ручной контроль» запрещает автономный запуск.
+
+Политику и набор разрешённых адаптеров можно изменить после создания проекта через кнопку «⚙ Политика» на доске. Настройка сохраняется в реестре проектов и повторно проверяется сервером при каждом запуске команды.
+
+При включённых браузерных уведомлениях Harness сообщает о зависшей задаче и проблемах файлового моста только при появлении нового предупреждения, без повторного спама на каждом обновлении.
 
 ## Product extensions
 
