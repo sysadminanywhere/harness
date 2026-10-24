@@ -6,3 +6,4 @@ data/projects.json
 .harness/
 output/playwright/*.png
 release/
+dist/

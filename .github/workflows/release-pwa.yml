@@ -1,4 +1,4 @@
-name: Release Harness Lab PWA
+name: Release Harness Lab Apps
 
 on:
   push:
@@ -15,10 +15,22 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: windows-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build:
+    name: Build ${{ matrix.platform }} package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            command: package:desktop:win
+          - platform: linux
+            runner: ubuntu-latest
+            command: package:desktop:linux
+          - platform: macos
+            runner: macos-latest
+            command: package:desktop:mac
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Check out source
@@ -30,44 +42,88 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Validate Harness
-        shell: pwsh
         run: npm test
+
+      - name: Package desktop application
+        run: npm run ${{ matrix.command }}
+
+      - name: Package installable PWA
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: .\scripts\package-pwa.ps1 -Version '${{ inputs.version || github.ref_name }}' -OutputDirectory release
+
+      - name: Upload desktop packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-desktop-${{ matrix.platform }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.blockmap
+          if-no-files-found: error
+
+      - name: Upload PWA package
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-pwa
+          path: release/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Download desktop packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: harness-desktop-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Download PWA package
+        uses: actions/download-artifact@v4
+        with:
+          name: harness-pwa
+          path: artifacts
 
       - name: Determine release version
         id: version
-        shell: pwsh
+        shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if ($env:EVENT_NAME -eq 'push') {
-            $tag = $env:REF_NAME
-          } else {
-            $tag = $env:INPUT_VERSION
-            if (-not $tag.StartsWith('v')) { $tag = "v$tag" }
-          }
-          $version = $tag.TrimStart('v')
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "version=$version" >> $env:GITHUB_OUTPUT
+          if [ "$EVENT_NAME" = "push" ]; then
+            tag="$REF_NAME"
+          else
+            tag="$INPUT_VERSION"
+            [[ "$tag" == v* ]] || tag="v$tag"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Package installable PWA
-        shell: pwsh
-        run: .\scripts\package-pwa.ps1 -Version '${{ steps.version.outputs.version }}' -OutputDirectory release
-
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: harness-lab-pwa-${{ steps.version.outputs.version }}
-          path: release/harness-lab-pwa-v${{ steps.version.outputs.version }}.zip
-          if-no-files-found: error
-
-      - name: Create GitHub Release and attach PWA
-        shell: pwsh
+      - name: Create GitHub Release with all packages
+        shell: bash
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          $archive = "release/harness-lab-pwa-v$env:RELEASE_VERSION.zip"
-          gh release create $env:RELEASE_TAG $archive --title "Harness Lab $env:RELEASE_TAG" --generate-notes --target $env:GITHUB_SHA
+          mapfile -t assets < <(find artifacts -maxdepth 1 -type f -print)
+          gh release create "$RELEASE_TAG" "${assets[@]}" \
+            --title "Harness Lab $RELEASE_TAG" \
+            --generate-notes \
+            --target "$GITHUB_SHA"

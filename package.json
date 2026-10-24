@@ -2,5 +2,70 @@
   "name": "harness-lab",
   "version": "0.1.0",
   "private": true,
-  "scripts": { "start": "node server.js", "check": "node --check app.js && node --check server.js && node --check scripts/test.mjs", "smoke": "node scripts/smoke.mjs", "test": "npm run check && node scripts/test.mjs", "package:pwa": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-pwa.ps1" }
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node server.js",
+    "desktop": "electron .",
+    "check": "node --check app.js && node --check server.js && node --check scripts/test.mjs && node --check electron/main.js",
+    "smoke": "node scripts/smoke.mjs",
+    "test": "npm run check && node scripts/test.mjs",
+    "package:pwa": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-pwa.ps1",
+    "package:desktop": "npm run package:desktop:win",
+    "package:desktop:win": "electron-builder --win nsis portable",
+    "package:desktop:linux": "electron-builder --linux AppImage deb",
+    "package:desktop:mac": "electron-builder --mac dmg zip"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.sysadminanywhere.harness",
+    "productName": "Harness Lab",
+    "electronDist": "node_modules/electron/dist",
+    "asarUnpack": [
+      "server.js"
+    ],
+    "files": [
+      "app.js",
+      "board.js",
+      "data/board.json",
+      "electron/**/*",
+      "favicon.svg",
+      "i18n.js",
+      "index.html",
+      "LICENSE",
+      "manifest.json",
+      "package.json",
+      "planner.js",
+      "project.js",
+      "server.js",
+      "style.css",
+      "sw.js"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "category": "Utility",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
 }

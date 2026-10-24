@@ -4,9 +4,10 @@ const path = require('node:path');
 const { execFile, execFileSync } = require('node:child_process');
 
 const root = __dirname;
+const workspaceRoot = path.resolve(process.env.HARNESS_WORKSPACE || root);
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json' };
-const boardFile = path.join(root, 'data', 'board.json');
-const projectsFile = path.join(root, 'data', 'projects.json');
+const boardFile = path.join(workspaceRoot, 'data', 'board.json');
+const projectsFile = path.join(workspaceRoot, 'data', 'projects.json');
 const defaultBoard = {
   columns: [
     { id: 'inbox', title: 'Идеи', tone: 'muted' },
@@ -61,7 +62,7 @@ function ensureProjectFiles(project) {
 function ensureProjects() {
   fs.mkdirSync(path.dirname(projectsFile), { recursive: true });
   let projects = readJson(projectsFile, null);
-  if (!Array.isArray(projects)) { projects = [{ id: 'harness', name: 'Harness Lab', path: root, createdAt: new Date().toISOString() }]; writeJson(projectsFile, projects); }
+  if (!Array.isArray(projects)) { projects = [{ id: 'harness', name: 'Harness Lab', path: workspaceRoot, createdAt: new Date().toISOString() }]; writeJson(projectsFile, projects); }
   projects.forEach(ensureProjectFiles);
   return projects;
 }

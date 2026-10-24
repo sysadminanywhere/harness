@@ -33,6 +33,33 @@ npm test
 
 The project uses Windows-compatible Node commands and does not require `.sh` scripts.
 
+## Desktop application
+
+Harness Lab can run as a standalone desktop application without opening a browser or keeping a terminal open. The Electron shell starts the local server, opens the workspace in its own window, and stores application data in the current user's profile.
+
+For local development:
+
+```powershell
+npm install
+npm run desktop
+```
+
+To create an installer and a portable executable:
+
+```powershell
+npm run package:desktop
+```
+
+Platform-specific packages can be created with:
+
+```powershell
+npm run package:desktop:win   # Windows installer and portable .exe
+npm run package:desktop:linux # Linux AppImage and .deb
+npm run package:desktop:mac   # macOS .dmg and .zip
+```
+
+The output is written to `dist/`. The GitHub release workflow builds Windows, Linux, and macOS packages on native runners and publishes them together with the PWA archive.
+
 ## Build a PWA release
 
 The repository includes a Windows PowerShell packager and a GitHub Actions release workflow.
