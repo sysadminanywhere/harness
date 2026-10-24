@@ -8,7 +8,7 @@ plannerForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const submit = document.getElementById('planner-submit');
   submit.disabled = true;
-  submit.textContent = 'ИИ планирует…';
+  submit.textContent = window.harnessI18n?.getLanguage() === 'en' ? 'Planning…' : 'ИИ планирует…';
   try {
     const response = await fetch(`/api/projects/${encodeURIComponent(boardState.projectId)}/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal: plannerGoal.value.trim(), constraints: plannerConstraints.value.trim() }) });
     const result = await response.json();
@@ -18,7 +18,7 @@ plannerForm.addEventListener('submit', async (event) => {
     await saveBoard();
     plannerDialog.close();
     renderBoard();
-    toast(`ИИ предложил ${result.steps.length} шагов (${result.provider})`);
+    toast(window.harnessI18n?.getLanguage() === 'en' ? `${result.steps.length} steps suggested (${result.provider})` : `ИИ предложил ${result.steps.length} шагов (${result.provider})`);
   } catch (error) { toast(error.message); }
-  finally { submit.disabled = false; submit.textContent = 'Сформировать план'; }
+  finally { submit.disabled = false; submit.textContent = window.harnessI18n?.t('buildPlan', 'Сформировать план') || 'Сформировать план'; }
 });

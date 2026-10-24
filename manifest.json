@@ -1,0 +1,10 @@
+{
+  "name": "Harness Lab",
+  "short_name": "Harness",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101212",
+  "theme_color": "#101212",
+  "description": "Локальная канбан-среда планирования и контроля исполнителей",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

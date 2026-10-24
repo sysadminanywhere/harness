@@ -60,3 +60,4 @@ $('new-task').onclick = () => { if (running) return; $('goal').value = ''; $('co
 $('export').onclick = () => { const blob = new Blob([JSON.stringify({ mode: 'demo', ...runSnapshot, events }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'harness-run.json'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
 document.addEventListener('keydown', (event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && !$('history').open) { event.preventDefault(); run(); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); $('history-button').click(); } });
 renderResult();
+if (window.isSecureContext && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
