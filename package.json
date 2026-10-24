@@ -1,6 +1,8 @@
 {
   "name": "harness-lab",
   "version": "0.1.0",
+  "description": "Local-first project planning workspace with Kanban and desktop apps",
+  "author": "Sysadmin Anywhere",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -11,9 +13,9 @@
     "test": "npm run check && node scripts/test.mjs",
     "package:pwa": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-pwa.ps1",
     "package:desktop": "npm run package:desktop:win",
-    "package:desktop:win": "electron-builder --win nsis portable",
-    "package:desktop:linux": "electron-builder --linux AppImage deb",
-    "package:desktop:mac": "electron-builder --mac dmg zip"
+    "package:desktop:win": "electron-builder --win nsis portable --publish never",
+    "package:desktop:linux": "electron-builder --linux AppImage deb --publish never",
+    "package:desktop:mac": "electron-builder --mac dmg zip --publish never"
   },
   "devDependencies": {
     "electron": "^38.2.0",

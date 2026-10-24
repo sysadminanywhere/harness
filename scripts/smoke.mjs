@@ -71,10 +71,12 @@ try {
   if (!staleState.health?.warnings?.some((warning) => warning.includes('30 минут'))) throw new Error('Stale task warning is missing');
   const dryRun = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-command', command: 'Write-Output HARNESS_SMOKE', executor: 'powershell', dryRun: true }) });
   if (!dryRun.dryRun || dryRun.cwd !== temporaryProjectPath || dryRun.requiresConfirmation !== true) throw new Error('PowerShell dry-run contract is invalid');
-  const commandResult = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-command', title: 'PowerShell smoke', command: 'Write-Output HARNESS_SMOKE', executor: 'powershell', confirmed: true }) });
-  if (commandResult.status !== 'completed' || !commandResult.output?.includes('HARNESS_SMOKE')) throw new Error(`PowerShell execution failed: ${JSON.stringify(commandResult)}`);
-  const commandState = await request(`/api/projects/${temporaryProject.id}/state`);
-  if (commandState.status?.source !== 'powershell' || !commandState.report.includes('HARNESS_SMOKE')) throw new Error('PowerShell report contract is invalid');
+  if (process.platform === 'win32') {
+    const commandResult = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-command', title: 'PowerShell smoke', command: 'Write-Output HARNESS_SMOKE', executor: 'powershell', confirmed: true }) });
+    if (commandResult.status !== 'completed' || !commandResult.output?.includes('HARNESS_SMOKE')) throw new Error(`PowerShell execution failed: ${JSON.stringify(commandResult)}`);
+    const commandState = await request(`/api/projects/${temporaryProject.id}/state`);
+    if (commandState.status?.source !== 'powershell' || !commandState.report.includes('HARNESS_SMOKE')) throw new Error('PowerShell report contract is invalid');
+  }
   const adapterPreview = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-adapter', executor: 'cli', adapter: 'npm-test', dryRun: true }) });
   if (adapterPreview.adapter !== 'npm-test' || !adapterPreview.command.includes('npm')) throw new Error('CLI adapter dry-run is invalid');
   const cliResult = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-cli', executor: 'cli', command: 'node -e "console.log(\'HARNESS_CLI\')"', confirmed: true }) });
