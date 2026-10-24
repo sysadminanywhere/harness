@@ -4,7 +4,7 @@ const plannerForm = document.getElementById('planner-form');
 const plannerGoal = document.getElementById('planner-goal');
 const plannerConstraints = document.getElementById('planner-constraints');
 document.getElementById('suggest-plan').onclick = () => { plannerDialog.showModal(); plannerGoal.focus(); };
-plannerForm.addEventListener('submit', async (event) => {
+plannerForm.addEventListener('submit', async (event) => { if (event.submitter?.value === 'cancel') return;
   event.preventDefault();
   const submit = document.getElementById('planner-submit');
   submit.disabled = true;

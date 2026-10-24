@@ -8,6 +8,7 @@ const workspaceRoot = path.resolve(process.env.HARNESS_WORKSPACE || root);
 const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const boardFile = path.join(workspaceRoot, 'data', 'board.json');
 const projectsFile = path.join(workspaceRoot, 'data', 'projects.json');
+const publicFiles = new Set(['index.html', 'style.css', 'app.js', 'board.js', 'project.js', 'planner.js', 'i18n.js', 'favicon.svg', 'manifest.json', 'sw.js']);
 const defaultBoard = {
   columns: [
     { id: 'inbox', title: 'Идеи', tone: 'muted' },
@@ -40,7 +41,7 @@ function ensureBoard() {
 function readBoard() { ensureBoard(); try { return JSON.parse(fs.readFileSync(boardFile, 'utf8')); } catch { return defaultBoard; } }
 function writeJson(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); const temporary = `${file}.tmp`; fs.writeFileSync(temporary, JSON.stringify(value, null, 2)); fs.renameSync(temporary, file); }
 function writeText(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); const temporary = `${file}.tmp`; fs.writeFileSync(temporary, value); fs.renameSync(temporary, file); }
-function backupFile(file, backupDir, prefix) { if (!fs.existsSync(file)) return; fs.mkdirSync(backupDir, { recursive: true }); fs.copyFileSync(file, path.join(backupDir, `${prefix}-${Date.now()}.bak`)); }
+function backupFile(file, backupDir, prefix) { if (!fs.existsSync(file)) return; fs.mkdirSync(backupDir, { recursive: true }); let name = `${prefix}-${Date.now()}`; let suffix = 0; while (fs.existsSync(path.join(backupDir, `${name}.bak`))) name = `${prefix}-${Date.now()}-${++suffix}`; fs.copyFileSync(file, path.join(backupDir, `${name}.bak`)); }
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } }
 function fileHealth(file) { try { JSON.parse(fs.readFileSync(file, 'utf8')); return { valid: true }; } catch (error) { return { valid: false, error: error.message }; } }
 function slug(value) { return String(value).toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '').slice(0, 48) || 'project'; }
@@ -96,7 +97,7 @@ function projectState(project) {
   if (status.status === 'working' && status.updatedAt && Date.now() - new Date(status.updatedAt).getTime() > staleTaskMs) warnings.push(`Задача ${status.taskId || ''} не обновлялась более 30 минут`);
   return { project, git: gitInfo(project), policy: projectPolicy(project), worker: { enabled: autoDispatchEnabled, intervalMs: autoDispatchIntervalMs }, health: { readAt: new Date().toISOString(), warnings }, plan: readJson(path.join(harnessDir, 'plan.json'), defaultBoard), status, queue: readJson(path.join(harnessDir, 'queue.json'), []), claims: readJson(claimsPath(project), {}), report: fs.readFileSync(path.join(harnessDir, 'reports', 'latest.md'), 'utf8'), currentTask: fs.readFileSync(path.join(harnessDir, 'current-task.md'), 'utf8'), events: fs.readFileSync(path.join(harnessDir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-100).map(readJsonFromLine) };
 }
-function readBody(req, callback) { let body = ''; req.on('data', (chunk) => { body += chunk; if (body.length > 1_000_000) req.destroy(); }); req.on('end', () => { try { callback(JSON.parse(body || '{}')); } catch { callback(null); } }); }
+function readBody(req, callback) { let body = ''; req.on('data', (chunk) => { body += chunk; if (body.length > 1_000_000) req.destroy(); }); req.on('end', () => { let input; try { input = JSON.parse(body || '{}'); } catch { return callback(null); } callback(input); }); }
 function sendJson(res, status, value) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
 function localSuggestion(goal) { return [{ title: 'Уточнить цель и ограничения', description: `Зафиксировать ожидаемый результат для: ${goal}`, priority: 'high', status: 'ready', agent: 'Local planner', criteria: ['Цель сформулирована', 'Ограничения понятны'] }, { title: 'Собрать контекст проекта', description: 'Изучить релевантные файлы, решения и предыдущие результаты.', priority: 'medium', status: 'ready', agent: 'Local planner', criteria: ['Контекст приложен к шагу'] }, { title: 'Выполнить первый проверяемый результат', description: 'Сделать минимальное изменение и показать его пользователю.', priority: 'high', status: 'ready', agent: 'Local planner', criteria: ['Результат можно проверить'] }]; }
 function templatePlan(template) {
@@ -133,7 +134,7 @@ function writeTaskRequest(project, input, queued = false) {
 function createTask(project, input) {
   const harnessDir = harnessDirFor(project);
   const currentStatus = readJson(path.join(harnessDir, 'status.json'), { status: 'idle' });
-  if (currentStatus.status === 'working') {
+  if (['working', 'paused'].includes(currentStatus.status)) {
     const queueFile = path.join(harnessDir, 'queue.json');
     const queue = readJson(queueFile, []);
     const request = writeTaskRequest(project, input, true);
@@ -156,7 +157,7 @@ function createTask(project, input) {
 function dispatchNextTask(project) {
   const statusFile = path.join(harnessDirFor(project), 'status.json');
   const currentStatus = readJson(statusFile, { status: 'idle' });
-  if (currentStatus.status === 'working') return { error: 'Current task is still working' };
+  if (['working', 'paused'].includes(currentStatus.status)) return { error: 'Current task is still working or paused' };
   const queueFile = path.join(harnessDirFor(project), 'queue.json');
   const queue = readJson(queueFile, []);
   const priorityRank = { high: 0, medium: 1, low: 2 };
@@ -168,7 +169,7 @@ function dispatchNextTask(project) {
   appendEvent(project, { type: 'queue_dispatched', taskId: next.taskId, executor: next.executor, at: new Date().toISOString() });
   return { ...request, dispatched: true, queue };
 }
-function dispatchQueuedProjects() { if (!autoDispatchEnabled) return []; const dispatched = []; for (const project of ensureProjects()) { const status = readJson(path.join(harnessDirFor(project), 'status.json'), { status: 'idle' }); const queue = readJson(path.join(harnessDirFor(project), 'queue.json'), []); if (status.status !== 'working' && queue.length) { const result = dispatchNextTask(project); if (result.dispatched) dispatched.push({ projectId: project.id, taskId: result.taskId }); } } return dispatched; }
+function dispatchQueuedProjects() { if (!autoDispatchEnabled) return []; const dispatched = []; for (const project of ensureProjects()) { const status = readJson(path.join(harnessDirFor(project), 'status.json'), { status: 'idle' }); const queue = readJson(path.join(harnessDirFor(project), 'queue.json'), []); if (!['working', 'paused'].includes(status.status) && queue.length) { const result = dispatchNextTask(project); if (result.dispatched) dispatched.push({ projectId: project.id, taskId: result.taskId }); } } return dispatched; }
 function controlTask(project, input) {
   if (!input?.taskId || !controlStatuses[input.action]) return null;
   const status = { status: controlStatuses[input.action], taskId: input.taskId, title: input.title || '', executor: input.executor || 'codex', updatedAt: new Date().toISOString() };
@@ -207,6 +208,16 @@ function executeLocalCommand(project, input, onComplete) {
   if (adapter && input.executor !== adapter.executor) return onComplete(null, { error: 'Adapter and executor do not match' });
   if (!['powershell', 'cli'].includes(input.executor)) return onComplete(null, { error: 'Local command execution supports PowerShell or CLI' });
   if (input.confirmed !== true) return onComplete(null, { error: 'Explicit confirmation is required' });
+  const execArgs = ['powershell.exe', 'powershell', 'pwsh.exe', 'pwsh'].includes(String(file).toLowerCase()) ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', args.join(' ')] : args;
+  let execFileName = ['powershell', 'pwsh'].includes(String(file).toLowerCase()) ? `${file}.exe` : file;
+  // Windows cannot execute npm.cmd through execFile without a shell. Run npm's JS entry point directly.
+  if (process.platform === 'win32' && ['npm', 'npm.cmd'].includes(String(file).toLowerCase())) {
+    const npmDirs = [path.dirname(process.execPath), ...(process.env.PATH || process.env.Path || '').split(path.delimiter)];
+    const npmCli = npmDirs.map((dir) => path.join(dir.replace(/^"|"$/g, ''), 'node_modules', 'npm', 'bin', 'npm-cli.js')).find((candidate) => fs.existsSync(candidate));
+    if (!npmCli) return onComplete(null, { error: 'npm CLI entry point was not found' });
+    execFileName = process.execPath;
+    execArgs.unshift(npmCli);
+  }
   const startedAt = new Date().toISOString();
   const harnessDir = harnessDirFor(project);
   const statusFile = path.join(harnessDir, 'status.json');
@@ -215,8 +226,6 @@ function executeLocalCommand(project, input, onComplete) {
   const running = { status: 'working', taskId: input.taskId || null, title: input.title || displayCommand, executor: input.executor, source, command: displayCommand, cwd: project.path, updatedAt: startedAt };
   backupFile(statusFile, path.join(harnessDir, 'backups'), 'status'); writeJson(statusFile, running);
   appendEvent(project, { type: 'command_started', source, taskId: input.taskId, command: displayCommand });
-  const execArgs = ['powershell.exe', 'powershell', 'pwsh.exe', 'pwsh'].includes(String(file).toLowerCase()) ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', args.join(' ')] : args;
-  const execFileName = ['powershell', 'pwsh'].includes(String(file).toLowerCase()) ? `${file}.exe` : file;
   execFile(execFileName, execArgs, { cwd: project.path, env: safeEnvironment(), timeout: 30000, windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
     const finishedAt = new Date().toISOString();
     const output = [stdout, stderr ? `STDERR:\n${stderr}` : ''].filter(Boolean).join('\n').trim();
@@ -255,7 +264,7 @@ const server = http.createServer((req, res) => {
       if (!filename || !filename.startsWith('plan-') || !filename.endsWith('.bak')) return sendJson(res, 400, { error: 'Invalid plan version' });
       const backup = path.join(harnessDirFor(project), 'backups', filename); if (!fs.existsSync(backup)) return sendJson(res, 404, { error: 'Plan version not found' });
       const plan = readJson(backup, null); if (!plan || !Array.isArray(plan.cards) || !Array.isArray(plan.columns) || hasDependencyCycle(plan)) return sendJson(res, 400, { error: 'Invalid plan version' });
-      const planFile = path.join(harnessDirFor(project), 'plan.json'); backupFile(planFile, path.join(harnessDirFor(project), 'backups'), 'plan'); writeJson(planFile, plan); appendEvent(project, { type: 'plan_rollback', file: filename }); return sendJson(res, 200, plan);
+      const planFile = path.join(harnessDirFor(project), 'plan.json'); const current = readJson(planFile, defaultBoard); const restored = { ...plan, revision: Number(current.revision || 0) + 1, updatedAt: new Date().toISOString() }; backupFile(planFile, path.join(harnessDirFor(project), 'backups'), 'plan'); writeJson(planFile, restored); appendEvent(project, { type: 'plan_rollback', file: filename }); return sendJson(res, 200, restored);
     });
   }
   const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)(?:\/(state|plan|task|suggest|command|claim|release|queue(?:\/next)?))?$/);
@@ -294,7 +303,9 @@ const server = http.createServer((req, res) => {
     if (req.method === 'PUT') return readBody(req, (board) => { if (!board || !Array.isArray(board.cards) || !Array.isArray(board.columns)) return sendJson(res, 400, { error: 'Invalid board' }); writeJson(boardFile, board); return sendJson(res, 200, board); });
     res.writeHead(405); return res.end('Method not allowed');
   }
-  const file = path.resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
+  const publicPath = pathname === '/' ? 'index.html' : pathname.slice(1);
+  if (!publicFiles.has(publicPath)) { res.writeHead(404); return res.end('Not found'); }
+  const file = path.resolve(root, publicPath);
   if (!file.startsWith(root + path.sep)) { res.writeHead(403); return res.end('Forbidden'); }
   fs.readFile(file, (error, data) => { if (error) { res.writeHead(404); return res.end('Not found'); } res.writeHead(200, { 'Content-Type': `${types[path.extname(file)] || 'application/octet-stream'}; charset=utf-8` }); res.end(data); });
 });

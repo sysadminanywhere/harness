@@ -245,7 +245,7 @@ npm run smoke
 npm test
 ```
 
-`npm test` validates server APIs, file recovery, templates, plan versioning, executor contracts, queue dispatch, PowerShell execution, CLI execution, localization, imports, and the local protocol. Browser flows are verified separately with Playwright.
+`npm test` starts an isolated server with a temporary workspace and validates server APIs, file recovery, templates, plan versioning, executor contracts, queue dispatch, PowerShell execution, CLI and npm adapter execution, localization, imports, and the local protocol. It removes the temporary workspace afterward without changing your registered projects or `.harness` files. Regression checks cover paused-task preservation, stale edits after rollback, and private-file access. `npm run smoke` targets a running server (`HARNESS_URL`, default `http://localhost:4173`); use a disposable workspace because it exercises write operations. Browser flows are verified separately with Playwright.
 
 Карточки могут автоматически захватываться исполнителем или запускаться только по указанию пользователя. Для долгих задач Harness показывает агента и срок аренды захвата, продлевает аренду heartbeat-запросами, пишет захват/освобождение в аудит и позволяет освободить рабочую карточку прямо на доске. При создании проекта доступны шаблоны разработки, дефекта, исследования, релиза, миграции и проверки безопасности.
 

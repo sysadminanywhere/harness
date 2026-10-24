@@ -1,20 +1,29 @@
 import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
+const workspace = mkdtempSync(path.join(tmpdir(), 'harness-test-'));
 const port = process.env.HARNESS_TEST_PORT || '43173';
 const baseUrl = `http://127.0.0.1:${port}`;
 const server = spawn(process.execPath, ['server.js'], {
   cwd: process.cwd(),
-    env: { ...process.env, HARNESS_PORT: port, HARNESS_AUTO_DISPATCH: 'false' },
+  env: { ...process.env, HARNESS_PORT: port, HARNESS_WORKSPACE: workspace, HARNESS_AUTO_DISPATCH: 'false' },
   stdio: 'inherit',
   windowsHide: true,
 });
 
 let stopping = false;
 
-function stopServer() {
+async function stopServer() {
   if (stopping) return;
   stopping = true;
-  if (!server.killed) server.kill();
+  if (server.exitCode === null && server.signalCode === null) {
+    const exited = new Promise((resolve) => server.once('exit', resolve));
+    server.kill();
+    await exited;
+  }
+  rmSync(workspace, { recursive: true, force: true });
 }
 
 async function waitForServer(timeoutMs = 15000) {
@@ -36,7 +45,7 @@ async function main() {
   await waitForServer();
   const smoke = spawn(process.execPath, ['scripts/smoke.mjs'], {
     cwd: process.cwd(),
-    env: { ...process.env, HARNESS_URL: baseUrl },
+    env: { ...process.env, HARNESS_URL: baseUrl, HARNESS_WORKSPACE: workspace },
     stdio: 'inherit',
     windowsHide: true,
   });
@@ -51,5 +60,5 @@ async function main() {
 try {
   await main();
 } finally {
-  stopServer();
+  await stopServer();
 }

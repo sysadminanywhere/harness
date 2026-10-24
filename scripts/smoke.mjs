@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const baseUrl = process.env.HARNESS_URL || 'http://localhost:4173';
-const root = path.resolve(import.meta.dirname, '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const workspace = path.resolve(process.env.HARNESS_WORKSPACE || root);
 
 async function request(route, options) {
   const response = await fetch(`${baseUrl}${route}`, options);
@@ -16,18 +18,23 @@ async function request(route, options) {
 
 const projects = await request('/api/projects');
 if (!Array.isArray(projects) || !projects.some((project) => project.id === 'harness')) throw new Error('Harness project is missing');
+if (process.env.HARNESS_WORKSPACE && !projects.some((project) => project.id === 'harness' && path.resolve(project.path) === workspace)) throw new Error('Test server is using the wrong workspace');
+for (const route of ['/server.js', '/package.json', '/data/board.json', '/.harness/status.json', '/.git/config']) {
+  const response = await fetch(`${baseUrl}${route}`);
+  if (response.status !== 404) throw new Error(`Internal file is publicly accessible: ${route}`);
+}
 
 const state = await request('/api/projects/harness/state');
 if (!Array.isArray(state.plan?.cards) || !Array.isArray(state.plan?.columns)) throw new Error('Invalid persisted plan');
 if (!state.claims || typeof state.claims !== 'object') throw new Error('Claim state is missing from project state');
-if (!state.worker || state.worker.enabled !== false) throw new Error('Test worker mode is not explicit');
+if (!state.worker || typeof state.worker.enabled !== 'boolean') throw new Error('Worker state is missing');
 if (!['idle', 'working', 'paused', 'cancelled', 'completed', 'failed'].includes(state.status?.status)) throw new Error(`Unknown runtime status: ${state.status?.status}`);
 
 const suggestion = await request('/api/projects/harness/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal: 'smoke test' }) });
 if (suggestion.provider !== 'local-planner' || suggestion.steps?.length !== 3) throw new Error('Local planner response is invalid');
 
 for (const required of ['.harness/project.json', '.harness/plan.json', '.harness/status.json', '.harness/current-task.md', '.harness/events.jsonl', '.harness/reports/latest.md']) {
-  if (!fs.existsSync(path.join(root, required))) throw new Error(`Missing file: ${required}`);
+  if (!fs.existsSync(path.join(workspace, required))) throw new Error(`Missing file: ${required}`);
 }
 const localizationSource = fs.readFileSync(path.join(root, 'i18n.js'), 'utf8');
 if (!localizationSource.includes('en:') || !localizationSource.includes('localStorage')) throw new Error('Localization source is incomplete');
@@ -67,12 +74,15 @@ try {
   const stalePlanResponse = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...templateState.plan, revision: 0 }) });
   if (stalePlanResponse.status !== 409) throw new Error('Concurrent plan edit was not rejected');
   const changedPlan = structuredClone(templateState.plan); changedPlan.cards.push({ id: 'smoke-version', title: 'Version marker', status: 'inbox', priority: 'low', criteria: [] });
-  await request(`/api/projects/${temporaryProject.id}/plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changedPlan) });
+  const beforeRollback = await request(`/api/projects/${temporaryProject.id}/plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changedPlan) });
   const versions = await request(`/api/projects/${temporaryProject.id}/plan/versions`);
   if (versions.length < 2) throw new Error('Plan versions are missing');
   await request(`/api/projects/${temporaryProject.id}/plan/rollback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: versions[0].file }) });
   const rolledBack = await request(`/api/projects/${temporaryProject.id}/state`);
   if (rolledBack.plan.cards.some((card) => card.id === 'smoke-version')) throw new Error('Plan rollback did not restore version');
+  if (rolledBack.plan.revision !== beforeRollback.revision + 1) throw new Error('Rollback must advance the plan revision');
+  const staleAfterRollback = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(beforeRollback) });
+  if (staleAfterRollback.status !== 409) throw new Error('Stale edit overwrote a rolled-back plan');
   const cyclicPlan = structuredClone(templateState.plan); cyclicPlan.cards[0].dependencies = [cyclicPlan.cards[1].id]; cyclicPlan.cards[1].dependencies = [cyclicPlan.cards[0].id];
   const cycleResponse = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cyclicPlan) });
   if (cycleResponse.status !== 400) throw new Error('Dependency cycle was accepted');
@@ -95,6 +105,13 @@ try {
   await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'priority-task', title: 'Priority executor task', executor: 'cli', priority: 'high', dueDate: '2026-10-25' }) });
   const queue = await request(`/api/projects/${temporaryProject.id}/queue`);
   if (queue.length !== 2 || !queue.some((item) => item.taskId === 'queued-task') || !queue.some((item) => item.taskId === 'priority-task')) throw new Error('Executor queue is missing the tasks');
+  await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-task', action: 'pause' }) });
+  const pausedDispatch = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/queue/next`, { method: 'POST' });
+  if (pausedDispatch.status !== 409) throw new Error('Queue overwrote a paused task');
+  const pausedRequest = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'paused-queued-task', title: 'Wait for paused executor', executor: 'codex', priority: 'low' }) });
+  if (!pausedRequest.queued) throw new Error('New task overwrote a paused task');
+  const pausedState = await request(`/api/projects/${temporaryProject.id}/state`);
+  if (pausedState.status.status !== 'paused' || pausedState.status.taskId !== 'smoke-task') throw new Error('Paused executor context was lost');
   fs.writeFileSync(path.join(temporaryProjectPath, '.harness', 'status.json'), JSON.stringify({ ...taskState.status, status: 'completed', updatedAt: new Date().toISOString() }));
   const dispatched = await request(`/api/projects/${temporaryProject.id}/queue/next`, { method: 'POST' });
   if (!dispatched.dispatched || dispatched.taskId !== 'priority-task') throw new Error('Executor queue did not dispatch the highest-priority task');
@@ -122,6 +139,9 @@ try {
   if (safeBlocked.status !== 403) throw new Error('Safe policy allowed arbitrary shell command');
   const cliResult = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-cli', executor: 'cli', command: 'node -e "console.log(\'HARNESS_CLI\')"', confirmed: true }) });
   if (cliResult.status !== 'completed' || !cliResult.output.includes('HARNESS_CLI') || cliResult.source !== 'cli') throw new Error('CLI execution failed');
+  fs.writeFileSync(path.join(temporaryProjectPath, 'package.json'), JSON.stringify({ scripts: { test: 'node -e "console.log(\'HARNESS_NPM\')"' } }));
+  const npmResult = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-npm', executor: 'cli', adapter: 'npm-test', confirmed: true }) });
+  if (npmResult.status !== 'completed' || !npmResult.output.includes('HARNESS_NPM')) throw new Error(`npm adapter failed: ${JSON.stringify(npmResult)}`);
   fs.writeFileSync(path.join(temporaryProjectPath, '.harness', 'plan.json'), '{"columns": [');
   const recovered = await request(`/api/projects/${temporaryProject.id}/state`);
   if (!recovered.health?.warnings?.some((warning) => warning.startsWith('plan.json:')) || !recovered.plan?.columns?.length) throw new Error('Corrupted JSON recovery warning is missing');
