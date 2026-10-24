@@ -1,63 +1,206 @@
 # Harness Lab
 
-Интерактивный прототип рабочей среды AI-агента. Интерфейс на русском, без зависимостей и сборки.
+Harness Lab is a local mission-control workspace for planning, executing, and reviewing work across multiple software projects. It combines a Kanban board with a file-based bridge that lets Codex, IDEs, terminals, scripts, and human contributors collaborate without a mandatory AI API or cloud service.
 
-## Запуск
+All project state is stored locally. Harness does not call external AI APIs and does not require API keys.
 
-```sh
+## Quick start on Windows
+
+Requirements:
+
+- Node.js 18 or newer.
+- PowerShell.
+- A project folder that Harness can read and write.
+
+From PowerShell:
+
+```powershell
+Set-Location D:\GitHub\harness
 npm start
 ```
 
-Открыть адрес, напечатанный в терминале (обычно http://localhost:4173). Если порт занят, сервер выбирает следующий свободный порт в диапазоне 4173–4193. Остановка: Ctrl+C. Проверка синтаксиса: `npm run check`.
+Open the URL printed in the terminal, normally `http://localhost:4173`. If the port is busy, Harness tries the next available port through 4193. Stop the server with `Ctrl+C`.
 
-### WebStorm на Windows
+Run the validation suite with:
 
-1. Открой папку `D:\GitHub\harness` как проект.
-2. В терминале WebStorm выполни `npm install` только если IDE сообщает об отсутствующих пакетах — приложение использует встроенные модули Node.js.
-3. Создай конфигурацию `npm`: `package.json` — файл проекта, `Command` — `run`, `Scripts` — `start`.
-4. Запусти конфигурацию и открой адрес из консоли.
-5. Для проверки используй `npm test`; `.sh`-скрипты не требуются.
+```powershell
+npm test
+```
 
-## Возможности
+The project uses Windows-compatible Node commands and does not require `.sh` scripts.
 
-- Редактирование цели, ограничений и критериев.
-- Демонстрационный запуск с последовательной лентой действий.
-- Обзор результата и пример diff.
-- Повторный запуск, локальная история с поиском, экспорт журнала в JSON.
-- Адаптивная компоновка и горячие клавиши Ctrl+Enter / Ctrl+K.
+## WebStorm, IntelliJ, and VS Code
 
-Старый режим исполнения сохраняет демонстрационный сценарий добавления поиска. Codex не управляется напрямую: взаимодействие с ним идёт через файлы `.harness` внутри проекта. История демонстрационных запусков хранится в localStorage браузера. Для шрифтов используется Google Fonts с системным fallback.
-## Mission Control и связь с Codex
+Open `D:\GitHub\harness` as a project and start the application with an npm configuration:
 
-В текущей версии добавлена файловая доска для нескольких локальных проектов.
+1. Select `package.json` from the Harness project.
+2. Set the command to `run`.
+3. Set the script to `start`.
+4. Run the configuration and open the URL shown in the terminal.
 
-1. Запусти `npm start`.
-2. В правом верхнем углу выбери проект или добавь папку по абсолютному Windows-пути.
-3. Harness создаст внутри проекта папку `.harness`.
-4. Создай карточку и нажми `Запустить в Codex`.
-5. Прочитай `.harness/current-task.md` в Codex и выполни задачу.
-6. Обновляй `.harness/status.json`, добавляй события в `.harness/events.jsonl` и сохрани отчёт в `.harness/reports/latest.md`.
+The same file protocol works from WebStorm, IntelliJ IDEA, VS Code, Cursor, a terminal, or any custom tool. Open the target project folder in the tool, read `.harness/current-task.md`, and write the result back to the `.harness` files.
 
-Файловый протокол не требует API-ключа и не управляет окном Codex напрямую. Harness отслеживает состояние проекта через файлы и обновляет канбан после изменений. Инструкция протокола находится в `AGENTS.md`.
+## Main capabilities
 
-### IDE и другие программы
+- Multiple registered projects with an isolated `.harness` directory for each project.
+- Kanban planning with drag-and-drop, dependencies, cycle detection, priorities, deadlines, estimates, roles, comments, mentions, history, and saved views.
+- Local planning suggestions from the built-in planner; no external AI API is used.
+- Codex, IDE, PowerShell, CLI/script, and human executors using one local contract.
+- Task pause, resume, cancel, retry, review, and completion gates.
+- Completion validation that requires a report and acceptance criteria.
+- Executor queue stored in `.harness/queue.json`, so a new task cannot overwrite an active task.
+- PowerShell execution with explicit confirmation, dry-run preview, a 30-second timeout, project working directory, and a restricted environment allowlist.
+- Shell-free CLI execution for approved `git`, `npm`, and `node` commands.
+- Built-in adapters for `git status`, `npm test`, `npm run lint`, and `npm run build`.
+- Markdown, JSON, CSV, GitHub Issues, and Trello export imports.
+- Plan versioning, backups, optimistic concurrency checks, and rollback.
+- Git branch and project health visibility.
+- English and Russian interface localization with browser-persisted language selection.
+- PWA shell, offline static assets, and optional local browser notifications.
+- JSON and Markdown plan/event export.
+- Windows smoke tests and Playwright browser verification.
 
-WebStorm/IntelliJ, VS Code, Cursor, терминал и любой другой инструмент подключаются одинаково: откройте ту же папку проекта, прочитайте `.harness/current-task.md`, а результат запишите в `.harness/status.json`, `.harness/events.jsonl` и `.harness/reports/latest.md`. Для Harness неважно, какая программа редактирует исходники; источник события указывается как `ide`, `cli`, `powershell`, `codex` или `user`.
+## Mission Control workflow
 
-## Локальный планировщик
+1. Start Harness and select an existing project or add a project folder by absolute Windows path.
+2. Harness creates `.harness` inside the selected project without deleting project files.
+3. Create or import a plan and assign each step to an executor.
+4. Start a task from the board.
+5. Let the selected tool work in the project folder.
+6. Review the report, changed files, events, criteria, and task history.
+7. Confirm the result or return the task to work.
 
-Harness работает полностью локально и не содержит интеграции с API ИИ. Кнопка «Предложить план» использует встроенный планировщик, который формирует базовые шаги из цели и ограничений. Codex подключается только через файлы `.harness` внутри папки проекта.
+High-priority tasks can require an approval checkpoint before execution. Dependencies prevent a task from starting while required cards are unfinished.
 
-## Языки интерфейса
+## File-based collaboration protocol
 
-В верхней панели доступен переключатель `RU/EN`. Выбор сохраняется в браузере. Переводится интерфейс Harness, статусы, приоритеты, диалоги и сообщения; содержимое файлового протокола проекта сохраняется в исходном языке задачи. При отсутствии перевода используется русский fallback.
+Each registered project contains:
 
-## Исполнители
+```text
+.harness/
+  project.json       project metadata
+  plan.json          Kanban columns, cards, and plan revision
+  current-task.md    task currently assigned to an executor
+  status.json        current executor status and timestamps
+  events.jsonl       append-only activity stream
+  context.md         optional project context
+  queue.json         waiting tasks
+  requests/          task and control requests
+  reports/
+    latest.md        latest executor report
+  backups/           recoverable file snapshots
+```
 
-Каждый шаг можно назначить Codex, IDE, PowerShell, CLI/скрипту или человеку. Выбор хранится в `plan.json`, попадает в историю событий и передаётся единым локальным контрактом в `.harness/status.json` и `.harness/requests/*.json`. Harness не вызывает внешние AI API и не запускает команды автоматически: внешняя программа читает файловый request и сама отчитывается через `.harness`.
+An executor should:
 
-Для локальной проверки команд можно назначить карточке исполнителя `PowerShell` или `CLI`, указать команду и включить `dry-run`. Кнопка запуска сначала показывает предварительный просмотр; реальный запуск требует явного подтверждения, выполняется без shell-интерпретации в папке проекта, ограничен таймаутом 30 секунд и записывает stdout/stderr, код выхода и статус в `.harness/reports/latest.md`, `.harness/status.json` и `.harness/events.jsonl`. Разрешены PowerShell, `npm`, `node` и `git`; готовые адаптеры: `git status`, `npm test`, `npm run lint`, `npm run build`. Окружение передаётся только по allowlist. Внешние AI API при этом не используются.
+1. Read `.harness/current-task.md` before starting.
+2. Update `.harness/status.json` while working.
+3. Append meaningful events to `.harness/events.jsonl`.
+4. Write the final result to `.harness/reports/latest.md`.
+5. Leave the task failed or blocked when required checks did not pass.
 
-Если текущая задача занята, следующая задача не перезаписывает `current-task.md`: она попадает в `.harness/queue.json`. Исполнитель может получить очередь через `GET /api/projects/<id>/queue`, а забрать следующий элемент — через `POST /api/projects/<id>/queue/next` после завершения текущей работы.
+The protocol is deliberately tool-agnostic. Harness does not need to control an IDE window or a Codex process directly; it observes the shared files and updates the board.
 
-PWA-shell кэширует статические файлы для offline-запуска. Локальные уведомления включаются пользователем кнопкой «Уведомления» и сообщают о завершении или ошибке задачи; внешние сервисы для этого не используются.
+## Executors and local commands
+
+### Codex and IDEs
+
+Assign a card to `Codex` or `IDE` when the external tool should consume the file request and report through `.harness`. This works with WebStorm, IntelliJ IDEA, VS Code, Cursor, Codex, or a custom agent.
+
+### PowerShell
+
+Assign `PowerShell`, enter a command, and optionally enable dry-run. A real execution requires an explicit confirmation in the UI. Harness runs PowerShell in the registered project directory and records stdout, stderr, exit code, status, and timestamps in the project report and event stream.
+
+### CLI and adapters
+
+Assign `CLI / script` and either enter a command or select an adapter:
+
+- `Git status`
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
+The command is executed without shell interpolation. Approved executables are limited to PowerShell, `npm`, `node`, and `git`; the working directory is the registered project directory and only a small environment allowlist is passed to the process.
+
+### Queue
+
+When an executor is busy, a new task is written to `.harness/queue.json` instead of replacing `current-task.md`.
+
+```text
+GET  /api/projects/<project-id>/queue
+POST /api/projects/<project-id>/queue/next
+```
+
+An executor can inspect the queue and claim the next task after the active task reaches a terminal state.
+
+## Import and export
+
+Use the `Import` button on the board to import:
+
+- Markdown checklist items such as `- [ ] Implement login`.
+- JSON plans or card arrays.
+- CSV files with `title`, `description`, `priority`, `status`, and `executor` columns.
+- GitHub Issues exports with `title`, `body`, `state`, and optional `html_url`.
+- Trello exports with `name`, `desc`, `closed`, and optional `shortUrl`.
+
+Imported cards retain their source metadata and are recorded as an import event. Plans and recent events can be downloaded as JSON or Markdown.
+
+## Local API overview
+
+The local Node server exposes project-scoped endpoints including:
+
+```text
+GET  /api/projects
+POST /api/projects
+GET  /api/projects/<id>/state
+PUT  /api/projects/<id>/plan
+POST /api/projects/<id>/task
+POST /api/projects/<id>/command
+GET  /api/projects/<id>/queue
+POST /api/projects/<id>/queue/next
+GET  /api/projects/<id>/plan/versions
+POST /api/projects/<id>/plan/rollback
+POST /api/projects/<id>/suggest
+```
+
+The planner endpoint is local and deterministic. It does not proxy prompts to an AI provider.
+
+## Security and safety model
+
+- No external AI API calls or API keys.
+- No automatic command execution: local commands require an explicit UI confirmation unless they are only being previewed.
+- Dry-run is available before execution.
+- CLI executable allowlist and shell-free argument execution.
+- Project working-directory restriction.
+- Restricted environment variables.
+- 30-second local command timeout and bounded output buffer.
+- Project removal only removes the project from the Harness registry; it does not delete the project folder.
+- Plan backups and optimistic concurrency checks protect against accidental overwrites.
+
+Harness is a local workflow guard, not a full operating-system sandbox. Do not register untrusted project folders or approve commands you have not reviewed.
+
+## Development checks
+
+```powershell
+npm run check
+npm run smoke
+npm test
+```
+
+`npm test` validates server APIs, file recovery, templates, plan versioning, executor contracts, queue dispatch, PowerShell execution, CLI execution, localization, imports, and the local protocol. Browser flows are verified separately with Playwright.
+
+## Product extensions
+
+The current foundation makes several useful extensions possible without changing the local-first model:
+
+- Git diff and changed-file review directly inside the report dialog.
+- Named command profiles with per-project approval policies.
+- Scheduled local checks and recurring health monitors.
+- Richer executor routing based on capabilities, priority, and availability.
+- Additional import mappings for Jira, Linear, Azure DevOps, and generic task exports.
+- Webhooks or local folder watchers for tools that cannot call the Harness API.
+- Team synchronization through an optional self-hosted shared file store.
+- Audit-log filters, saved reports, and release readiness dashboards.
+- Extension packages for language-specific test runners, linters, and build systems.
+
+These extensions are intentionally compatible with the existing `.harness` protocol and do not require a hosted AI service.
