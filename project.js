@@ -6,7 +6,20 @@ const projectPath = document.getElementById('project-path');
 const templateLabel = document.createElement('label'); templateLabel.htmlFor = 'project-template'; templateLabel.textContent = 'Шаблон проекта';
 const projectTemplate = document.createElement('select'); projectTemplate.id = 'project-template'; projectTemplate.innerHTML = '<option value="web">Web-приложение</option><option value="backend">Backend/API</option><option value="saas">SaaS</option><option value="research">Исследование</option><option value="game">Игра</option>'; projectPath.before(templateLabel, projectTemplate);
 let projects = [];
-async function loadProjects() { const response = await fetch('/api/projects'); if (!response.ok) throw new Error('Projects unavailable'); projects = await response.json(); projectSelect.innerHTML = projects.map((project) => `<option value="${project.id}">${project.name}</option>`).join(''); const selected = projects.find((project) => project.id === (localStorage.getItem('harness-project') || 'harness')) || projects[0]; projectSelect.value = selected.id; await setActiveProject(selected); }
+const onboardingStorageKey = 'harness-onboarding-complete';
+function showProjectOnboarding() {
+  if (localStorage.getItem(onboardingStorageKey)) return;
+  const english = window.harnessI18n?.getLanguage() !== 'ru';
+  const dialog = document.createElement('dialog');
+  dialog.id = 'onboarding-dialog';
+  dialog.innerHTML = `<div class="dialog-heading"><div><div class="eyebrow">${english ? 'FIRST WORKSPACE' : 'ПЕРВАЯ РАБОЧАЯ ОБЛАСТЬ'}</div><h2>${english ? 'Set up your first project' : 'Настройте первый проект'}</h2></div></div><p>${english ? 'Harness works with local project folders. Create a new workspace or connect an existing project to get started.' : 'Harness работает с локальными папками проектов. Создайте рабочую область или подключите существующий проект, чтобы начать.'}</p><div class="dialog-actions"><button id="onboarding-create" class="button primary">${english ? 'Create or connect project' : 'Создать или подключить проект'}</button></div><p class="run-note">${english ? 'You can add more projects later from the project switcher.' : 'Позже можно добавить проекты через переключатель проектов.'}</p>`;
+  document.body.append(dialog);
+  const finish = () => { localStorage.setItem(onboardingStorageKey, '1'); dialog.close(); dialog.remove(); };
+  dialog.querySelector('#onboarding-create').onclick = () => { finish(); document.getElementById('add-project').click(); };
+  dialog.addEventListener('cancel', finish, { once: true });
+  dialog.showModal();
+}
+async function loadProjects() { const response = await fetch('/api/projects'); if (!response.ok) throw new Error('Projects unavailable'); projects = await response.json(); projectSelect.innerHTML = projects.map((project) => `<option value="${project.id}">${project.name}</option>`).join(''); const selected = projects.find((project) => project.id === (localStorage.getItem('harness-project') || 'harness')) || projects[0]; projectSelect.value = selected.id; await setActiveProject(selected); setTimeout(showProjectOnboarding, 0); }
 projectSelect.addEventListener('change', async () => { const project = projects.find((item) => item.id === projectSelect.value); if (project) await setActiveProject(project); });
 document.getElementById('add-project').addEventListener('click', () => { projectForm.reset(); projectTemplate.value = 'web'; projectDialog.showModal(); projectName.focus(); });
 document.getElementById('remove-project').addEventListener('click', async () => {

@@ -4,7 +4,7 @@ const translations = {
     'missionEyebrow': 'MISSION CONTROL / 001', 'heroTitle': 'План под контролем.', 'heroText': 'Разложи цель на шаги, запусти исполнителя и контролируй каждое решение.',
     'board': '▦ Доска', 'execution': '▶ Исполнение', 'newPlan': 'Новый план', 'activePlan': 'ACTIVE PLAN', 'report': '▤ Отчёт', 'suggest': '✦ Предложить план', 'addStep': '＋ Добавить шаг',
     'searchPlaceholder': 'Поиск по плану…', 'allPriorities': 'Все приоритеты', 'high': 'Высокий', 'medium': 'Средний', 'low': 'Низкий',
-    'projectLabel': 'ПРОЕКТ', 'branchLabel': 'ВЕТКА', 'modeLabel': 'РЕЖИМ', 'modeDemo': 'Демонстрация', 'branchLoading': 'проверка…', 'branchNone': 'не Git-проект',
+    'projectLabel': 'ПРОЕКТ', 'branchLabel': 'ВЕТКА', 'modeLabel': 'РЕЖИМ', 'modeDemo': 'Локальная рабочая область', 'branchLoading': 'проверка…', 'branchNone': 'не Git-проект',
     'steps': 'шагов', 'completed': 'завершено', 'sync': 'синхр.', 'ideas': 'Идеи', 'ready': 'Готово', 'working': 'В работе', 'approval': 'Ожидает решения', 'review': 'Проверка', 'blocked': 'Заблокировано', 'done': 'Завершено',
     'localPlanner': 'LOCAL PLANNER', 'plannerTitle': 'Предложить план', 'goal': 'Цель', 'constraints': 'Ограничения', 'plannerHint': 'План будет предложен на доску и не запустится без вашего решения.', 'buildPlan': 'Сформировать план',
     'codexReport': 'CODEX REPORT', 'reportTitle': 'Отчёт проекта', 'lastEvents': 'Последние события', 'noEvents': 'Событий пока нет.', 'noReport': 'Отчёт пока не создан.',
@@ -17,7 +17,7 @@ const translations = {
     'missionEyebrow': 'MISSION CONTROL / 001', 'heroTitle': 'Plan under control.', 'heroText': 'Break down the goal, launch an executor and control every decision.',
     'board': '▦ Board', 'execution': '▶ Execution', 'newPlan': 'New plan', 'activePlan': 'ACTIVE PLAN', 'report': '▤ Report', 'suggest': '✦ Suggest plan', 'addStep': '＋ Add step',
     'searchPlaceholder': 'Search plan…', 'allPriorities': 'All priorities', 'high': 'High', 'medium': 'Medium', 'low': 'Low',
-    'projectLabel': 'PROJECT', 'branchLabel': 'BRANCH', 'modeLabel': 'MODE', 'modeDemo': 'Demo', 'branchLoading': 'checking…', 'branchNone': 'not a Git project',
+    'projectLabel': 'PROJECT', 'branchLabel': 'BRANCH', 'modeLabel': 'MODE', 'modeDemo': 'Local workspace', 'branchLoading': 'checking…', 'branchNone': 'not a Git project',
     'steps': 'steps', 'completed': 'completed', 'sync': 'synced', 'ideas': 'Ideas', 'ready': 'Ready', 'working': 'Working', 'approval': 'Needs decision', 'review': 'Review', 'blocked': 'Blocked', 'done': 'Done',
     'localPlanner': 'LOCAL PLANNER', 'plannerTitle': 'Suggest plan', 'goal': 'Goal', 'constraints': 'Constraints', 'plannerHint': 'The plan will be added to the board and will not start without your decision.', 'buildPlan': 'Build plan',
     'codexReport': 'EXECUTOR REPORT', 'reportTitle': 'Project report', 'lastEvents': 'Recent events', 'noEvents': 'No events yet.', 'noReport': 'No report yet.',
@@ -28,8 +28,8 @@ const translations = {
 };
 
 const languageStorageKey = 'harness-language';
-let language = localStorage.getItem(languageStorageKey) || 'ru';
-function t(key, fallback = translations.ru[key] || key) { return translations[language]?.[key] || translations.ru[key] || fallback; }
+let language = localStorage.getItem(languageStorageKey) || 'en';
+function t(key, fallback = translations.en[key] || key) { return translations[language]?.[key] || translations.en[key] || fallback; }
 function setText(selector, key) { const element = document.querySelector(selector); if (element) element.textContent = t(key); }
 function applyLanguage() {
   document.documentElement.lang = language;
