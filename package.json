@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node server.js",
     "desktop": "electron .",
-    "check": "node --check app.js && node --check board.js && node --check project.js && node --check planner.js && node --check i18n.js && node --check sw.js && node --check server.js && node --check scripts/test.mjs && node --check scripts/smoke.mjs && node --check scripts/create-icons.mjs && node --check electron/main.js",
+    "check": "node --check app.js && node --check board.js && node --check project.js && node --check planner.js && node --check i18n.js && node --check sw.js && node --check server.js && node --check codex-bridge.js && node --check scripts/test.mjs && node --check scripts/smoke.mjs && node --check scripts/create-icons.mjs && node --check electron/main.js",
     "smoke": "node scripts/smoke.mjs",
     "test": "npm run check && node scripts/test.mjs",
     "prepare:icons": "node scripts/create-icons.mjs",
@@ -35,6 +35,7 @@
     "files": [
       "app.js",
       "board.js",
+      "codex-bridge.js",
       "data/board.json",
       "electron/**/*",
       "favicon.svg",

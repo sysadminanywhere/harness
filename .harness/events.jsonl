@@ -217,3 +217,13 @@
 {"type":"task_completed","taskId":"executor-live-report-20261025","source":"codex","at":"2026-10-25T15:10:00.000Z","checks":["npm test","git diff --cached --check","DOM implementation: executor-pulse rendered from status/events/report"],"files":["index.html","board.js","style.css","i18n.js"]}
 {"type":"task_started","taskId":"readme-english-screenshot-20261025","source":"codex","title":"Обновить скриншот интерфейса в README","at":"2026-10-25T15:20:00.000Z"}
 {"type":"task_completed","taskId":"readme-english-screenshot-20261025","source":"codex","at":"2026-10-25T15:20:00.000Z","checks":["README image reference","git diff --cached --check"],"files":["docs/harness-lab-en.png"]}
+{"type":"task_started","taskId":"codex-thread-project-20261025","source":"codex","title":"Показывать работу Harness в открытом Codex проекте","at":"2026-10-25T15:30:00.000Z"}
+{"type":"task_completed","taskId":"codex-thread-project-20261025","source":"codex","at":"2026-10-25T15:45:00.000Z","checks":["npm test with HARNESS_CODEX_BRIDGE=false","Codex exec --help option validation","git diff --cached --check"],"files":["codex-bridge.js","server.js","board.js","package.json"]}
+{"type":"task_started","taskId":"readme-benefits-20261025","source":"codex","title":"Описать преимущества Harness в README","at":"2026-10-25T16:00:00.000Z"}
+{"type":"task_completed","taskId":"readme-benefits-20261025","source":"codex","at":"2026-10-25T16:05:00.000Z","checks":["README content review","git diff --check"],"files":["README.md"]}
+{"type":"task_started","taskId":"confirm-result-report-20261025","source":"codex","title":"Исправить подтверждение результата","at":"2026-10-25T16:10:00.000Z"}
+{"type":"task_completed","taskId":"confirm-result-report-20261025","source":"codex","at":"2026-10-25T16:20:00.000Z","checks":["npm test with HARNESS_CODEX_BRIDGE=false","git diff --check"],"files":["server.js","board.js"]}
+{"type":"task_started","taskId":"runtime-status-refresh-20261025","source":"codex","title":"Исправить обновление статуса на доске","at":"2026-10-25T16:30:00.000Z"}
+{"type":"task_completed","taskId":"runtime-status-refresh-20261025","source":"codex","at":"2026-10-25T16:40:00.000Z","checks":["npm test with HARNESS_CODEX_BRIDGE=false","service-worker cache version review","git diff --check"],"files":["board.js","sw.js"]}
+{"type":"task_started","taskId":"file-bridge-heartbeat-20261025","source":"codex","title":"Исправить heartbeat файлового моста","at":"2026-10-25T16:50:00.000Z"}
+{"type":"task_completed","taskId":"file-bridge-heartbeat-20261025","source":"codex","at":"2026-10-25T17:00:00.000Z","checks":["npm test with HARNESS_CODEX_BRIDGE=false","git diff --check"],"files":["server.js","board.js"]}

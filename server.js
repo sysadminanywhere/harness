@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFile, execFileSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
+const { CodexBridge } = require('./codex-bridge');
 
 const root = path.resolve(process.env.HARNESS_APP_ROOT || __dirname);
 const workspaceRoot = path.resolve(process.env.HARNESS_WORKSPACE || root);
@@ -53,7 +54,7 @@ function harnessDirFor(project) { return path.join(project.path, '.harness'); }
 function runDir(project, runId) { return path.join(harnessDirFor(project), 'runs', runId); }
 function workerLeasePath(project) { return path.join(harnessDirFor(project), 'worker-lease.json'); }
 function createRun(project, input, status = 'queued') { const runId = input.runId || `run-${Date.now()}-${randomUUID().slice(0, 8)}`; const run = { runId, projectId: project.id, taskId: input.taskId, title: input.title || '', executor: input.executor || 'codex', priority: input.priority || 'medium', dueDate: input.dueDate || null, status, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; fs.mkdirSync(runDir(project, runId), { recursive: true }); writeJson(path.join(runDir(project, runId), 'run.json'), run); return run; }
-function finishRun(project, runId, result) { if (!runId) return; const file = path.join(runDir(project, runId), 'run.json'); const run = readJson(file, { runId }); const finished = { ...run, ...result, runId, updatedAt: result.finishedAt || new Date().toISOString() }; writeJson(file, finished); if (result.report) writeText(path.join(runDir(project, runId), 'report.md'), result.report); }
+function finishRun(project, runId, result) { if (!runId) return; const file = path.join(runDir(project, runId), 'run.json'); const run = readJson(file, { runId }); const finished = { ...run, ...result, runId, updatedAt: result.finishedAt || new Date().toISOString() }; writeJson(file, finished); if (result.report) { writeText(path.join(runDir(project, runId), 'report.md'), result.report); writeText(path.join(harnessDirFor(project), 'reports', 'latest.md'), result.report); } }
 function listRuns(project) { const root = path.join(harnessDirFor(project), 'runs'); if (!fs.existsSync(root)) return []; return fs.readdirSync(root).map((runId) => { const run = readJson(path.join(root, runId, 'run.json'), null); if (!run) return null; const reportFile = path.join(root, runId, 'report.md'); return { ...run, report: fs.existsSync(reportFile) ? fs.readFileSync(reportFile, 'utf8') : '' }; }).filter(Boolean).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))); }
 function projectHealth(project) { ensureProjectFiles(project); const harnessDir = harnessDirFor(project); const required = ['project.json', 'plan.json', 'status.json', 'queue.json', 'events.jsonl', 'current-task.md', 'context.md', 'reports/latest.md']; const files = required.map((relative) => { const file = path.join(harnessDir, relative); return { file: relative, exists: fs.existsSync(file), valid: relative.endsWith('.json') ? fileHealth(file).valid : fs.existsSync(file) }; }); const status = readJson(path.join(harnessDir, 'status.json'), {}); const runs = listRuns(project); return { ok: files.every((item) => item.exists && item.valid), projectId: project.id, checkedAt: new Date().toISOString(), files, activeRunId: status.runId || null, runCount: runs.length, warnings: files.filter((item) => !item.exists || !item.valid).map((item) => `${item.file} is missing or invalid`) }; }
 function createRuntimeBackup(project) { ensureProjectFiles(project); const stamp = new Date().toISOString().replace(/[:.]/g, '-'); const file = path.join(harnessDirFor(project), 'backups', `runtime-${stamp}.json`); const snapshot = { version: 1, createdAt: new Date().toISOString(), project: readJson(path.join(harnessDirFor(project), 'project.json'), project), plan: readJson(path.join(harnessDirFor(project), 'plan.json'), defaultBoard), status: readJson(path.join(harnessDirFor(project), 'status.json'), {}), queue: readJson(path.join(harnessDirFor(project), 'queue.json'), []), runs: listRuns(project) }; writeJson(file, snapshot); appendEvent(project, { type: 'runtime_backup_created', file: path.basename(file) }); return { file: path.basename(file), path: file, createdAt: snapshot.createdAt, runCount: snapshot.runs.length }; }
@@ -99,9 +100,12 @@ function gitInfo(project) {
 }
 function readJsonFromLine(line) { try { return JSON.parse(line); } catch { return { type: 'invalid', raw: line }; } }
 function appendEvent(project, event) { fs.appendFileSync(path.join(harnessDirFor(project), 'events.jsonl'), `${JSON.stringify({ ...event, at: new Date().toISOString() })}\n`); }
+function updateRuntimeStatus(project, patch) { const file = path.join(harnessDirFor(project), 'status.json'); const status = readJson(file, { status: 'idle' }); backupFile(file, path.join(harnessDirFor(project), 'backups'), 'status'); writeJson(file, { ...status, ...patch, updatedAt: patch.updatedAt || new Date().toISOString() }); }
+function touchRuntimeStatus(project) { const file = path.join(harnessDirFor(project), 'status.json'); const status = readJson(file, null); if (status?.status === 'working' || status?.status === 'paused') writeJson(file, { ...status, updatedAt: new Date().toISOString() }); }
+const codexBridge = new CodexBridge({ appendEvent, updateStatus: updateRuntimeStatus, finishRun });
 const claimTtlMs = 30 * 60 * 1000;
 function claimsPath(project) { return path.join(harnessDirFor(project), 'claims.json'); }
-function claimTask(project, input) { ensureProjectFiles(project); const claims = readJson(claimsPath(project), {}); const now = Date.now(); const current = claims[input.taskId]; if (current && current.claimedBy !== input.claimedBy && now - new Date(current.claimedAt).getTime() < claimTtlMs) return { error: 'Task is already claimed', claim: current }; const claim = { taskId: input.taskId, claimedBy: String(input.claimedBy || 'unknown'), claimedAt: new Date(now).toISOString(), expiresAt: new Date(now + claimTtlMs).toISOString() }; claims[input.taskId] = claim; writeJson(claimsPath(project), claims); appendEvent(project, { type: 'task_claimed', ...claim }); return claim; }
+function claimTask(project, input) { ensureProjectFiles(project); const claims = readJson(claimsPath(project), {}); const now = Date.now(); const current = claims[input.taskId]; if (current && current.claimedBy !== input.claimedBy && now - new Date(current.claimedAt).getTime() < claimTtlMs) return { error: 'Task is already claimed', claim: current }; const claim = { taskId: input.taskId, claimedBy: String(input.claimedBy || 'unknown'), claimedAt: new Date(now).toISOString(), expiresAt: new Date(now + claimTtlMs).toISOString() }; claims[input.taskId] = claim; writeJson(claimsPath(project), claims); if (readJson(path.join(harnessDirFor(project), 'status.json'), null)?.taskId === input.taskId) touchRuntimeStatus(project); appendEvent(project, { type: 'task_claimed', ...claim }); return claim; }
 function releaseTask(project, input) { ensureProjectFiles(project); const claims = readJson(claimsPath(project), {}); const current = claims[input.taskId]; if (current && current.claimedBy !== input.claimedBy) return { error: 'Task is claimed by another agent', claim: current }; delete claims[input.taskId]; writeJson(claimsPath(project), claims); appendEvent(project, { type: 'task_released', taskId: input.taskId, claimedBy: input.claimedBy }); return { released: true, taskId: input.taskId }; }
 function projectState(project) {
   const harnessDir = harnessDirFor(project);
@@ -171,6 +175,12 @@ function createTask(project, input) {
   const request = writeTaskRequest(project, input, false);
   const status = { status: 'working', taskId: input.taskId, runId: request.runId, title: input.title, executor: selectedExecutor, selectedExecutor, updatedAt: new Date().toISOString() };
   backupFile(path.join(harnessDir, 'status.json'), path.join(harnessDir, 'backups'), 'status'); writeJson(path.join(harnessDir, 'status.json'), status);
+  if (selectedExecutor === 'codex' && process.env.HARNESS_CODEX_BRIDGE !== 'false') {
+    codexBridge.start(project, input, request).catch((error) => {
+      appendEvent(project, { type: 'codex_bridge_error', source: 'codex-app-server', taskId: input.taskId, runId: request.runId, error: error.message });
+      updateRuntimeStatus(project, { codexError: error.message, source: 'codex-app-server' });
+    });
+  }
   return request;
 }
 function dispatchNextTask(project) {

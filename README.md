@@ -4,6 +4,19 @@ Harness Lab is a local mission-control workspace for planning, executing, and re
 
 All project state is stored locally. Harness does not call external AI APIs and does not require API keys.
 
+## Why Harness Lab
+
+Harness Lab is useful when work must stay visible, reviewable, and connected to a real project folder:
+
+- **Any executor, one contract.** Codex, another IDE, PowerShell, CLI scripts, and a human can work through the same task, status, event, and report files.
+- **Local-first control.** Plans, queues, reports, backups, and audit events remain inside the project’s `.harness` directory. There is no mandatory cloud workspace or AI provider lock-in.
+- **Progress you can see.** The board shows the active executor, meaningful events, current status, and the latest report instead of hiding work behind a running button.
+- **Codex project continuity.** When Codex is selected, Harness starts a persistent Codex session in the registered project folder, stores its thread ID, and provides an **Open in Codex** link.
+- **Safe execution gates.** High-priority work, dependencies, approvals, dry-runs, command allowlists, leases, retries, and completion reports make execution explicit and recoverable.
+- **Traceable results.** Every important transition can be inspected through `status.json`, append-only `events.jsonl`, the latest report, run history, and recoverable backups.
+- **Works with existing projects.** Harness adds a `.harness` bridge around an existing folder without deleting source files or forcing a new repository structure.
+- **Designed for teams and tools.** English/Russian UI, imports and exports, project policies, queues, browser notifications, desktop packaging, and a stable file protocol make the workflow portable.
+
 ## Interface preview
 
 ![Harness Lab English interface](docs/harness-lab-en.png)
@@ -157,13 +170,15 @@ An executor should:
 4. Write the final result to `.harness/reports/latest.md`.
 5. Leave the task failed or blocked when required checks did not pass.
 
-The protocol is deliberately tool-agnostic. Harness does not need to control an IDE window or a Codex process directly; it observes the shared files and updates the board.
+The protocol is deliberately tool-agnostic. Harness observes shared files for external tools and can also start a local Codex session when Codex is selected as the executor.
 
 ## Executors and local commands
 
 ### Codex and IDEs
 
 Assign a card to `Codex` or `IDE` when the external tool should consume the file request and report through `.harness`. This works with WebStorm, IntelliJ IDEA, VS Code, Cursor, Codex, or a custom agent.
+
+For Codex, the Run action starts `codex exec --json` with the registered project folder as its working directory. Harness records JSONL progress, saves the persistent thread identifier, and exposes a `codex://threads/...` link in the executor panel so the work can be opened in Codex.
 
 ### PowerShell
 
