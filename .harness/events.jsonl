@@ -1,0 +1,201 @@
+{"id":"request-1792829014898","type":"start_task","taskId":"card-1","title":"Сформировать план продукта","createdAt":"2026-10-24T08:03:34.898Z","at":"2026-10-24T08:03:34.900Z"}
+{"type":"plan_saved","at":"2026-10-24T08:03:34.906Z"}
+{"type":"plan_suggested","provider":"local-fallback","count":3,"at":"2026-10-24T08:29:57.772Z"}
+{"type":"plan_suggested","provider":"local-fallback","count":3,"at":"2026-10-24T08:30:06.842Z"}
+{"type":"plan_saved","at":"2026-10-24T08:30:06.858Z"}
+{"type":"plan_saved","at":"2026-10-24T08:30:12.344Z"}
+{"type":"plan_saved","at":"2026-10-24T08:30:23.142Z"}
+{"id":"request-1792830623153","type":"start_task","taskId":"card-1792827862966-3cbf4cec80e098","title":"Уточнить цель и ограничения","createdAt":"2026-10-24T08:30:23.153Z","at":"2026-10-24T08:30:23.155Z"}
+{"type":"plan_saved","at":"2026-10-24T08:30:23.160Z"}
+{"type":"plan_saved","at":"2026-10-24T08:30:29.386Z"}
+{"type":"plan_suggested","provider":"local-fallback","count":3,"at":"2026-10-24T08:42:35.389Z"}
+{"type":"plan_suggested","provider":"local-fallback","count":3,"at":"2026-10-24T08:42:53.479Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T08:48:36.577Z"}
+{"type":"plan_saved","at":"2026-10-24T09:08:21.503Z"}
+{"type":"plan_saved","at":"2026-10-24T09:08:26.952Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:08:48.318Z"}
+{"id":"request-1792833082365","type":"task_control","action":"pause","taskId":"card-1","title":"Сформировать план продукта","createdAt":"2026-10-24T09:11:22.365Z","at":"2026-10-24T09:11:22.367Z"}
+{"id":"request-1792833084406","type":"task_control","action":"resume","taskId":"card-1","title":"Сформировать план продукта","createdAt":"2026-10-24T09:11:24.406Z","at":"2026-10-24T09:11:24.408Z"}
+{"id":"request-1792833091068","type":"task_control","action":"pause","taskId":"card-1","title":"Сформировать план продукта","createdAt":"2026-10-24T09:11:31.068Z","at":"2026-10-24T09:11:31.069Z"}
+{"type":"plan_saved","at":"2026-10-24T09:11:31.082Z"}
+{"id":"request-1792833094084","type":"task_control","action":"resume","taskId":"card-1","title":"Сформировать план продукта","createdAt":"2026-10-24T09:11:34.084Z","at":"2026-10-24T09:11:34.085Z"}
+{"type":"plan_saved","at":"2026-10-24T09:11:34.098Z"}
+{"type":"plan_saved","at":"2026-10-24T09:12:40.616Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:14:20.035Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:14:59.097Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:16:02.033Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:16:12.999Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:17:08.910Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:17:28.077Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:17:53.169Z"}
+{"type":"plan_saved","at":"2026-10-24T09:18:05.802Z"}
+{"type":"plan_saved","at":"2026-10-24T09:18:14.036Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:18:31.010Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:18:48.447Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:19:12.619Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:24:54.034Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:25:37.858Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:26:12.460Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:28:18.545Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:28:35.262Z"}
+{"type":"plan_saved","at":"2026-10-24T09:28:56.201Z"}
+{"type":"plan_saved","at":"2026-10-24T09:29:05.262Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:30:07.612Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:30:34.600Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:31:08.135Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:32:06.086Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:33:05.425Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:33:36.003Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:34:01.101Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:34:30.971Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:35:08.243Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:35:16.882Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:36:03.454Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:36:35.973Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:37:12.675Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:37:39.228Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:38:05.301Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:38:35.640Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:39:17.506Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:40:50.611Z"}
+{"type":"plan_saved","revision":1,"at":"2026-10-24T09:42:01.655Z"}
+{"type":"plan_saved","revision":2,"at":"2026-10-24T09:42:09.739Z"}
+{"type":"command_dry_run","source":"powershell","taskId":"card-1792834921649-98f09fbaef517","command":"Write-Output HARNESS_PLAYWRIGHT","at":"2026-10-24T09:42:22.685Z"}
+{"type":"plan_saved","revision":3,"at":"2026-10-24T09:42:22.761Z"}
+{"type":"plan_saved","revision":4,"at":"2026-10-24T09:42:29.767Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:42:57.531Z"}
+{"type":"plan_saved","revision":5,"at":"2026-10-24T09:43:11.683Z"}
+{"type":"plan_saved","revision":6,"at":"2026-10-24T09:43:22.437Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:43:45.001Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:44:49.878Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:45:06.712Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:45:53.559Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:46:26.607Z"}
+{"type":"plan_saved","revision":7,"at":"2026-10-24T09:46:32.722Z"}
+{"type":"plan_saved","revision":8,"at":"2026-10-24T09:46:41.161Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:46:54.644Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:47:15.775Z"}
+{"type":"plan_saved","revision":9,"at":"2026-10-24T09:47:25.677Z"}
+{"type":"plan_saved","revision":10,"at":"2026-10-24T09:47:36.604Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T09:47:43.513Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T10:06:07.397Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T10:09:22.803Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T10:14:45.723Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T10:14:53.491Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T10:20:08.408Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T10:20:18.898Z"}
+{"type":"plan_saved","revision":11,"at":"2026-10-24T10:25:22.246Z"}
+{"type":"command_started","source":"powershell","taskId":"debug-pwsh","command":"powershell.exe Write-Output HARNESS_SMOKE","at":"2026-10-24T10:27:19.331Z"}
+{"type":"command_finished","source":"powershell","taskId":"debug-pwsh","status":"completed","exitCode":0,"at":"2026-10-24T10:27:19.742Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T10:27:33.806Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T10:55:43.443Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:01:30.967Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:02:17.861Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:03:38.911Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:04:30.505Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:06:16.067Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:19:10.859Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:20:15.006Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:23:06.765Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:35:14.670Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:37:53.389Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:49:50.281Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:50:01.308Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:51:03.964Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:51:55.668Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:53:02.691Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:54:49.658Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:58:05.733Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T11:59:23.979Z"}
+{"type":"task_started","taskId":"global-subtasks-columns","title":"Глобальные задачи и подзадачи по колонкам","at":"2026-10-24T15:30:00+03:00"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T12:25:28.022Z"}
+{"type":"hierarchical_board_implemented","taskId":"global-subtasks-columns","files":["board.js","index.html","style.css","data/board.json"],"checks":["npm test","node --check board.js","browser smoke"],"at":"2026-10-24T12:28:09.713Z"}
+{"type":"task_completed","taskId":"global-subtasks-columns","status":"completed","at":"2026-10-24T12:29:30.000Z"}
+{"type":"task_started","taskId":"llm-plan-and-execution-mode","title":"Импорт плана LLM и режимы запуска задач","at":"2026-10-24T12:48:00.000Z"}
+{"type":"plan_bridge_and_execution_modes_implemented","files":["server.js","board.js","README.md"],"checks":["npm test","node --check board.js","git diff --check","browser smoke"],"at":"2026-10-24T12:48:00.000Z"}
+{"type":"task_completed","taskId":"llm-plan-and-execution-mode","status":"completed","at":"2026-10-24T12:48:00.000Z"}
+{"type":"task_started","taskId":"plan-sync-autonomy-hardening","title":"Синхронизация плана и защита автономного запуска","at":"2026-10-24T13:02:00.000Z"}
+{"type":"plan_sync_hardened","features":["stable plan keys","global status derivation","smoke plan contract"],"checks":["npm test","node --check board.js","node --check server.js","git diff --check"],"at":"2026-10-24T13:02:00.000Z"}
+{"type":"task_completed","taskId":"plan-sync-autonomy-hardening","status":"completed","at":"2026-10-24T13:02:00.000Z"}
+{"type":"task_started","taskId":"plan-preview-json-status-sync","title":"Предпросмотр и JSON-синхронизация плана","at":"2026-10-24T13:18:00.000Z"}
+{"type":"plan_preview_json_status_implemented","features":["import preview","markdown checked status","fenced JSON plan"],"checks":["npm test","node --check server.js","node --check board.js","node --check scripts/smoke.mjs","git diff --check"],"at":"2026-10-24T13:18:00.000Z"}
+{"type":"task_completed","taskId":"plan-preview-json-status-sync","status":"completed","at":"2026-10-24T13:18:00.000Z"}
+{"type":"task_started","taskId":"plan-preview-claims","title":"Предпросмотр плана и защита захвата задач","at":"2026-10-24T13:35:00.000Z"}
+{"type":"plan_preview_claims_implemented","features":["confirmation preview","task claims","claim conflict smoke"],"checks":["npm test","node --check server.js","node --check board.js","node --check scripts/smoke.mjs","git diff --check"],"at":"2026-10-24T13:35:00.000Z"}
+{"type":"task_completed","taskId":"plan-preview-claims","status":"completed","at":"2026-10-24T13:35:00.000Z"}
+{"type":"task_started","taskId":"orchestration-plan-sync","title":"Оркестрация плана LLM и зависимостей","at":"2026-10-24T14:05:00.000Z"}
+{"type":"orchestration_plan_completed","features":["plan preview dialog","JSON dependencies","checked status sync","claim conflict protection"],"checks":["npm test","node --check server.js","node --check board.js","node --check scripts/smoke.mjs","git diff --check"],"at":"2026-10-24T14:05:00.000Z"}
+{"type":"task_completed","taskId":"orchestration-plan-sync","status":"completed","at":"2026-10-24T14:05:00.000Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T12:28:25.782Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T12:46:49.314Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T12:47:40.608Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T12:49:55.731Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T12:58:50.617Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:30:47.208Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:33:08.385Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:36:18.899Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:36:27.073Z"}
+{"type":"task_started","taskId":"agent-heartbeat-workflow-templates","title":"Захват задач, heartbeat и шаблоны рабочих процессов","at":"2026-10-24T14:20:00.000Z"}
+{"type":"agent_claim_ui_completed","details":"Добавлены claims в state, видимый исполнитель, heartbeat и освобождение карточки","at":"2026-10-24T14:30:00.000Z"}
+{"type":"workflow_templates_completed","details":"Добавлены development, bug, research, release, migration, security","at":"2026-10-24T14:32:00.000Z"}
+{"type":"task_completed","taskId":"agent-heartbeat-workflow-templates","checks":["npm test","git diff --check","HTTP GET /"],"at":"2026-10-24T14:35:00.000Z"}
+{"type":"task_started","taskId":"ai-inbox-priority-queue","title":"Очередь входящих задач ИИ и приоритетный запуск","at":"2026-10-24T14:40:00.000Z"}
+{"type":"ai_inbox_completed","details":"Добавлен блок входящих задач и приоритетная сортировка очереди","at":"2026-10-24T14:55:00.000Z"}
+{"type":"task_completed","taskId":"ai-inbox-priority-queue","checks":["npm test","node --check board.js","git diff --check"],"at":"2026-10-24T15:00:00.000Z"}
+{"type":"task_started","taskId":"audit-dependency-views","title":"Аудит действий и граф зависимостей","at":"2026-10-24T15:05:00.000Z"}
+{"type":"audit_view_completed","details":"Добавлены поиск и фильтры по типам событий в отчете проекта","at":"2026-10-24T15:20:00.000Z"}
+{"type":"dependency_graph_completed","details":"Добавлено представление графа зависимостей задач","at":"2026-10-24T15:22:00.000Z"}
+{"type":"task_completed","taskId":"audit-dependency-views","checks":["npm test","node --check board.js","git diff --check"],"at":"2026-10-24T15:25:00.000Z"}
+{"type":"task_started","taskId":"autonomy-policy-security","title":"Политики автономного запуска и безопасные команды","at":"2026-10-24T15:30:00.000Z"}
+{"type":"autonomy_policy_completed","details":"Добавлены ручной, подтверждаемый и автономный режимы; автономный shell ограничен адаптерами","at":"2026-10-24T15:45:00.000Z"}
+{"type":"task_completed","taskId":"autonomy-policy-security","checks":["npm test","node --check server.js","git diff --check"],"at":"2026-10-24T15:50:00.000Z"}
+{"type":"task_started","taskId":"project-policy-profiles","title":"Профили политики проекта","at":"2026-10-24T15:55:00.000Z"}
+{"type":"project_policy_profiles_completed","details":"Добавлены safe, development и manual с серверной проверкой адаптеров и shell-команд","at":"2026-10-24T16:05:00.000Z"}
+{"type":"task_completed","taskId":"project-policy-profiles","checks":["npm test","node --check project.js","git diff --check"],"at":"2026-10-24T16:10:00.000Z"}
+{"type":"task_started","taskId":"project-policy-settings","title":"Настройки политики существующего проекта","at":"2026-10-24T16:15:00.000Z"}
+{"type":"project_policy_settings_completed","details":"Добавлены PUT API и UI настройки профиля и разрешенных адаптеров","at":"2026-10-24T16:30:00.000Z"}
+{"type":"task_completed","taskId":"project-policy-settings","checks":["npm test","node --check server.js","git diff --check"],"at":"2026-10-24T16:35:00.000Z"}
+{"type":"task_started","taskId":"project-policy-settings-notifications","title":"Настройки политики и уведомления о проблемах","at":"2026-10-24T16:40:00.000Z"}
+{"type":"project_notifications_completed","details":"Добавлены настройки политики существующего проекта и уведомления только по новым предупреждениям","at":"2026-10-24T16:50:00.000Z"}
+{"type":"task_completed","taskId":"project-policy-settings-notifications","checks":["npm test","node --check board.js","git diff --check"],"at":"2026-10-24T16:55:00.000Z"}
+{"type":"roadmap_audit","details":"ROADMAP.md проверен, незавершенных пунктов нет","checks":["rg -n -e ^- \\[ \\] ROADMAP.md","npm test","git diff --check"],"at":"2026-10-24T17:10:00.000Z"}
+{"type":"roadmap_completed","taskId":"roadmap-complete","details":"Все приоритеты P1-P7 закрыты","at":"2026-10-24T17:10:00.000Z"}
+{"type":"task_started","taskId":"v2-auto-dispatch-worker","title":"Встроенный worker автоматической очереди","at":"2026-10-24T17:15:00.000Z"}
+{"type":"auto_dispatch_worker_completed","details":"Добавлен серверный worker очереди и переменные управления","at":"2026-10-24T17:30:00.000Z"}
+{"type":"task_completed","taskId":"v2-auto-dispatch-worker","checks":["npm test","node --check server.js","git diff --check"],"at":"2026-10-24T17:35:00.000Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:38:28.183Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:38:41.611Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:51:15.444Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:53:23.572Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:53:30.834Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:54:53.560Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:56:35.276Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:58:09.275Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:58:21.297Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T13:58:50.264Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T14:02:42.535Z"}
+{"type":"plan_suggested","provider":"local-planner","count":3,"at":"2026-10-24T14:24:46.963Z"}
+{"source":"codex","type":"audit_started","at":"2026-10-24T18:48:47.5741102Z","message":"Проверка проекта по запросу пользователя"}
+{"type":"audit_verified","source":"codex","at":"2026-10-24T18:56:09.877Z","checks":["npm test","Playwright","PWA packaging","git diff --check"],"files":["README.md","board.js","index.html","package.json","planner.js","project.js","scripts/create-icons.mjs","scripts/smoke.mjs","scripts/test.mjs","server.js","style.css","sw.js"]}
+{"type":"release_workflow_fixed","source":"codex","at":"2026-10-24T19:02:00.000Z","tag":"v0.1.2","behavior":"existing release assets are replaced with gh release upload --clobber"}
+{"type":"implementation_review_completed","source":"codex","at":"2026-10-25T06:13:34.000Z","checks":["npm test","Playwright isolated workflow","saveBoard VM reproduction"],"findings":{"P1":3,"P2":2},"sourceFilesChanged":false}
+{"type":"reliability_plan_saved","source":"codex","at":"2026-10-25T06:34:38.000Z","files":["docs/RELIABILITY_PLAN.md","IMPLEMENTATION_PLAN.md"],"stages":6,"checks":["git diff --check","git diff --cached --check"],"staged":true}
+{"type":"reliability_stage_started","source":"codex","at":"2026-10-25T07:00:00.000Z","taskId":"reliability-stage-1-20261025","scope":["saveBoard snapshot isolation","active task control validation","UI task priority and due date propagation"]}
+{"type":"reliability_stage_completed","source":"codex","at":"2026-10-25T07:18:00.000Z","taskId":"reliability-stage-1-20261025","checks":["npm test","git diff --check"],"files":["board.js","server.js","scripts/smoke.mjs"]}
+{"type":"reliability_stage_started","source":"codex","at":"2026-10-25T07:25:00.000Z","taskId":"reliability-stage-2-20261025","scope":["persistent runId records","run reports","command result regression"]}
+{"type":"reliability_stage_completed","source":"codex","at":"2026-10-25T07:36:00.000Z","taskId":"reliability-stage-2-20261025","checks":["npm test","git diff --check"],"files":["server.js","scripts/smoke.mjs"]}
+{"type":"reliability_stage_completed","source":"codex","at":"2026-10-25T07:52:00.000Z","taskId":"reliability-stage-3-20261025","checks":["npm test","git diff --check"],"files":["server.js","scripts/smoke.mjs"]}
+{"type":"reliability_stage_completed","source":"codex","at":"2026-10-25T08:00:00.000Z","taskId":"reliability-stage-4-20261025","checks":["npm test"],"files":["server.js","scripts/smoke.mjs"],"scope":"duplicate queued task protection"}
+{"type":"reliability_stage_completed","source":"codex","at":"2026-10-25T08:18:00.000Z","taskId":"reliability-stage-5-20261025","checks":["npm test"],"files":["board.js","server.js","scripts/smoke.mjs"],"scope":"UI runId and run history API"}
+{"type":"reliability_stage_started","source":"codex","at":"2026-10-25T08:30:00.000Z","taskId":"reliability-stage-6-20261025","checks":["npm test","npm run package:pwa"],"scope":"final acceptance"}
+{"type":"future_roadmap_saved","source":"codex","at":"2026-10-25T08:45:00.000Z","taskId":"future-roadmap-20261025","file":"docs/FUTURE_IMPROVEMENTS_PLAN.md","linkedFrom":"IMPLEMENTATION_PLAN.md","stages":6}
+{"type":"acceptance_browser_blocked","source":"codex","at":"2026-10-25T09:00:00.000Z","taskId":"acceptance-browser-20261025","reason":"Playwright CLI hangs without output in current environment","verified":["npm test","npm run package:pwa","git diff --cached --check"],"report":"docs/ACCEPTANCE.md"}
+{"type":"acceptance_browser_completed","source":"codex","at":"2026-10-25T09:35:00.000Z","taskId":"acceptance-browser-20261025","checks":["two projects in browser","A active and next task queued","A/B project switch","server restart recovery","npm test","npm run package:pwa"],"report":"docs/ACCEPTANCE.md"}
+{"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T10:05:00.000Z","taskId":"roadmap-stage-2-20261025","scope":["run history in project state/API","report selection in UI","retry clears old runId"],"checks":["npm test"]}
+{"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T10:30:00.000Z","taskId":"roadmap-stage-3-20261025","scope":["worker lease","dispatch lock","lease release regression"],"checks":["npm test"]}
+{"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T10:55:00.000Z","taskId":"roadmap-stage-4-20261025","scope":["command length limit","output limit","secret redaction","manual policy regression"],"checks":["npm test"]}
+{"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T11:20:00.000Z","taskId":"roadmap-stage-5-20261025","scope":["project health API","legacy status migration","integrity smoke check"],"checks":["npm test"]}
+{"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T11:45:00.000Z","taskId":"roadmap-stage-6-20261025","scope":["run status filter","selected run report","runs JSON export"],"checks":["npm test"]}
+{"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T12:10:00.000Z","taskId":"roadmap-stage-7-20261025","scope":["runtime backup API","plan/status/queue/run snapshot","backup smoke regression"],"checks":["npm test"]}
+{"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T12:35:00.000Z","taskId":"roadmap-stage-8-20261025","scope":["retention preview","confirm-required archive","backup/run retention smoke regression"],"checks":["npm test"]}
+{"type":"roadmap_completed","source":"codex","at":"2026-10-25T13:00:00.000Z","taskId":"roadmap-final-20261025","checks":["npm test","npm run package:pwa","git diff --cached --check"],"docs":["docs/FUTURE_IMPROVEMENTS_PLAN.md","docs/ACCEPTANCE.md","docs/INTEGRATIONS.md"]}

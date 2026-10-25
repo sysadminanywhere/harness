@@ -26,8 +26,15 @@ for (const route of ['/server.js', '/package.json', '/data/board.json', '/.harne
 
 const state = await request('/api/projects/harness/state');
 if (!Array.isArray(state.plan?.cards) || !Array.isArray(state.plan?.columns)) throw new Error('Invalid persisted plan');
+const health = await request('/api/projects/harness/health');
+if (!health.ok || !health.files?.every((file) => file.exists && file.valid)) throw new Error('Project health check is not clean');
+const backup = await request('/api/projects/harness/backup', { method: 'POST' });
+if (!backup.file || !fs.existsSync(path.join(workspace, '.harness', 'backups', backup.file))) throw new Error('Runtime backup was not created');
+const retention = await request('/api/projects/harness/retention', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keep: 20 }) });
+if (!retention.dryRun || !retention.confirmationRequired) throw new Error('Retention endpoint did not default to dry-run');
 if (!state.claims || typeof state.claims !== 'object') throw new Error('Claim state is missing from project state');
 if (!state.worker || typeof state.worker.enabled !== 'boolean') throw new Error('Worker state is missing');
+if (!Array.isArray(state.runs)) throw new Error('Run history is missing from project state');
 if (!['idle', 'working', 'paused', 'cancelled', 'completed', 'failed'].includes(state.status?.status)) throw new Error(`Unknown runtime status: ${state.status?.status}`);
 
 const suggestion = await request('/api/projects/harness/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal: 'smoke test' }) });
@@ -102,9 +109,13 @@ try {
   if (reclaimed.claimedBy !== 'agent-b') throw new Error('Released task could not be reclaimed');
   const queuedRequest = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'queued-task', title: 'Queued executor task', executor: 'cli', description: 'Queue contract', criteria: ['Queue is visible'] }) });
   if (!queuedRequest.queued || queuedRequest.selectedExecutor !== 'cli') throw new Error('Executor queue did not retain the requested executor');
+  const duplicateQueued = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'queued-task', title: 'Queued executor task', executor: 'cli' }) });
+  if (!duplicateQueued.duplicate || (await request(`/api/projects/${temporaryProject.id}/queue`)).filter((item) => item.taskId === 'queued-task').length !== 1) throw new Error('Duplicate queued task was accepted');
   await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'priority-task', title: 'Priority executor task', executor: 'cli', priority: 'high', dueDate: '2026-10-25' }) });
   const queue = await request(`/api/projects/${temporaryProject.id}/queue`);
   if (queue.length !== 2 || !queue.some((item) => item.taskId === 'queued-task') || !queue.some((item) => item.taskId === 'priority-task')) throw new Error('Executor queue is missing the tasks');
+  const staleControl = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'old-task', action: 'pause' }) });
+  if (staleControl.status !== 409) throw new Error('Control command changed a different active task');
   await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-task', action: 'pause' }) });
   const pausedDispatch = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/queue/next`, { method: 'POST' });
   if (pausedDispatch.status !== 409) throw new Error('Queue overwrote a paused task');
@@ -115,6 +126,7 @@ try {
   fs.writeFileSync(path.join(temporaryProjectPath, '.harness', 'status.json'), JSON.stringify({ ...taskState.status, status: 'completed', updatedAt: new Date().toISOString() }));
   const dispatched = await request(`/api/projects/${temporaryProject.id}/queue/next`, { method: 'POST' });
   if (!dispatched.dispatched || dispatched.taskId !== 'priority-task') throw new Error('Executor queue did not dispatch the highest-priority task');
+  if (fs.existsSync(path.join(temporaryProjectPath, '.harness', 'worker-lease.json'))) throw new Error('Worker lease was not released after dispatch');
   fs.writeFileSync(path.join(temporaryProjectPath, '.harness', 'status.json'), JSON.stringify({ ...taskState.status, updatedAt: new Date(Date.now() - 31 * 60 * 1000).toISOString() }));
   const staleState = await request(`/api/projects/${temporaryProject.id}/state`);
   if (!staleState.health?.warnings?.some((warning) => warning.includes('30 минут'))) throw new Error('Stale task warning is missing');
@@ -137,8 +149,17 @@ try {
   if (updatedPolicy.policy !== 'manual' || updatedPolicyState.policy?.label !== 'Полный ручной контроль' || updatedPolicyState.policy.allowedAdapters.length !== 1) throw new Error('Project policy update was not persisted');
   const safeBlocked = await fetch(`${baseUrl}/api/projects/${policyProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-safe-command', executor: 'powershell', command: 'Write-Output SAFE', confirmed: true }) });
   if (safeBlocked.status !== 403) throw new Error('Safe policy allowed arbitrary shell command');
+  const oversized = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-oversized', executor: 'cli', command: 'node ' + 'x'.repeat(4001), confirmed: true }) });
+  if (oversized.status !== 400) throw new Error('Oversized command was accepted');
   const cliResult = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-cli', executor: 'cli', command: 'node -e "console.log(\'HARNESS_CLI\')"', confirmed: true }) });
   if (cliResult.status !== 'completed' || !cliResult.output.includes('HARNESS_CLI') || cliResult.source !== 'cli') throw new Error('CLI execution failed');
+  if (!cliResult.runId || !fs.existsSync(path.join(temporaryProjectPath, '.harness', 'runs', cliResult.runId, 'run.json')) || !fs.existsSync(path.join(temporaryProjectPath, '.harness', 'runs', cliResult.runId, 'report.md'))) throw new Error('Run result was not persisted by runId');
+  const runs = await request(`/api/projects/${temporaryProject.id}/runs`);
+  if (!runs.some((run) => run.runId === cliResult.runId && run.status === 'completed')) throw new Error('Run history endpoint is missing the completed run');
+  const acceptedCli = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-cli', runId: cliResult.runId, action: 'complete' }) });
+  if (acceptedCli.action !== 'complete' || acceptedCli.runId !== cliResult.runId) throw new Error('Completed run was not accepted by runId');
+  const secretResult = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-secret', executor: 'cli', command: 'node -e "console.log(\'token=supersecret\')"', confirmed: true }) });
+  if (secretResult.status !== 'completed' || secretResult.output.includes('supersecret')) throw new Error('Secret output was not redacted');
   fs.writeFileSync(path.join(temporaryProjectPath, 'package.json'), JSON.stringify({ scripts: { test: 'node -e "console.log(\'HARNESS_NPM\')"' } }));
   const npmResult = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-npm', executor: 'cli', adapter: 'npm-test', confirmed: true }) });
   if (npmResult.status !== 'completed' || !npmResult.output.includes('HARNESS_NPM')) throw new Error(`npm adapter failed: ${JSON.stringify(npmResult)}`);
