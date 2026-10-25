@@ -227,3 +227,7 @@
 {"type":"task_completed","taskId":"runtime-status-refresh-20261025","source":"codex","at":"2026-10-25T16:40:00.000Z","checks":["npm test with HARNESS_CODEX_BRIDGE=false","service-worker cache version review","git diff --check"],"files":["board.js","sw.js"]}
 {"type":"task_started","taskId":"file-bridge-heartbeat-20261025","source":"codex","title":"Исправить heartbeat файлового моста","at":"2026-10-25T16:50:00.000Z"}
 {"type":"task_completed","taskId":"file-bridge-heartbeat-20261025","source":"codex","at":"2026-10-25T17:00:00.000Z","checks":["npm test with HARNESS_CODEX_BRIDGE=false","git diff --check"],"files":["server.js","board.js"]}
+{"type":"task_started","taskId":"live-executor-report-20261025","source":"codex","title":"Обновлять отчёт исполнителя по мере работы","at":"2026-10-25T17:10:00.000Z"}
+{"type":"task_completed","taskId":"live-executor-report-20261025","source":"codex","at":"2026-10-25T17:25:00.000Z","checks":["npm test","git diff --check","Playwright live report refresh without reload"],"files":["codex-bridge.js","server.js"]}
+{"type":"task_started","taskId":"agent-protocol-progress-20261025","source":"codex","title":"Уточнить правило промежуточного отчёта в AGENTS.md","at":"2026-10-25T17:30:00.000Z"}
+{"type":"task_completed","taskId":"agent-protocol-progress-20261025","source":"codex","at":"2026-10-25T17:35:00.000Z","checks":["AGENTS.md review","git diff --check"],"files":["AGENTS.md"]}
