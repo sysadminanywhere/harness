@@ -1,10 +1,10 @@
 const $ = (id) => document.getElementById(id);
-let running = false, completed = false, activeTab = 'summary', events = [], startTime = 0, timer, runSnapshot = null;
+let running = false, completed = false, activeTab = 'summary', events = [], startTime = 0, timer, toastTimer, runSnapshot = null;
 let history = [];
 try { history = JSON.parse(localStorage.getItem('harness-history') || '[]'); if (!Array.isArray(history)) history = []; } catch {}
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-function toast(message) { $('toast').textContent = message; $('toast').classList.add('visible'); setTimeout(() => $('toast').classList.remove('visible'), 2600); }
+function toast(message) { const element = $('toast'); const displayedMessage = message === 'Задача записана в .harness/current-task.md' ? (window.harnessI18n?.t('taskSaved', message) || message) : message; clearTimeout(toastTimer); element.textContent = displayedMessage; element.classList.add('visible'); toastTimer = setTimeout(() => element.classList.remove('visible'), 8000); }
 function renderResult() {
   if (!completed) {
     $('result-content').innerHTML = `<div class="empty-output"><div class="output-icon">▤</div><h3>${running ? 'Агент выполняет задачу' : 'Результат появится здесь'}</h3><p>${running ? 'Сводка и изменения будут доступны<br>после завершения проверок.' : 'Изменения, проверки и краткая сводка<br>после завершения задачи.'}</p></div><div class="placeholder-check"><span>◇</span> Изменения файлов</div><div class="placeholder-check"><span>✓</span> Результаты проверок</div><div class="placeholder-check"><span>↻</span> Повторяемый запуск</div>`;

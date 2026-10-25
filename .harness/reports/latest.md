@@ -1,4 +1,169 @@
+# Повторный запуск и среда — проверено
+
+После первого настоящего старта выявлен второй дефект: Windows sandbox не мог выдать WRITE_DAC на общий D:/Temp. CLI при этом вышел с кодом 0, что ошибочно считалось completed. Добавлены индивидуальные TEMP/TMP внутри каталога run и распознавание системных setup failures при нулевом коде. Sandbox не отключён, глобальные ACL/настройки не менялись.
+
+Проверено: прямая команда в sandbox с собственным TEMP — HARNESS_SANDBOX_OK; настоящий Codex исполнил терминальную команду — HARNESS_REAL_TOOLS_OK; npm test PASS, теперь 15 bridge tests. Повторный запуск 15 bridge tests и синтаксис нового tools probe после последних изменений — PASS. Руководство сверено: https://learn.chatgpt.com/docs/windows/windows-sandbox. Первая HCM-попытка run-1792943489185-2a942b63 фактически не выполнила задачу, несмотря на транспортный exitCode 0.
+
+Финальная проверка HCM: run-1792943985613-6b4bfa16, thread 01a173ca-14df-7031-aae2-e7ea3fbe3e8f; статус working. В аудите подтверждены несколько command_execution со status completed и exitCode 0; codexError null. Исполнитель действительно читает проект и выполняет команды. Этот сервер и запуск оставлены работать; результат реализации КЭДО не объявляется завершённым.
+
+Дополнительные файлы: codex-bridge.js, scripts/codex-bridge.test.cjs, scripts/probe-codex-tools.cjs, README.md. В исходном описании ниже зафиксирована первая фаза проверки; актуален этот верхний срез. Все изменения добавлены в Git.
+
+# Повторный запуск одним нажатием — проверено
+
+Retry ранее только возвращал карточку в ready. Теперь кнопка запускает новую попытку одним запросом: новый runId, остановка заменяемой попытки при необходимости и запуск/очередь выбранного исполнителя. Повтор того же запроса возвращает уже созданную попытку, в том числе когда исходный runId был null. Возврат в ready без исполнения выделен в reset и используется при перетаскивании.
+
+Локальный command retry требует подтверждения и проходит проверку политики; если исполнитель занят, команда сохраняется и действительно выполняется при dispatch. Пока запрос идёт, кнопка показывает «Запускаем…»; ошибки действия сохраняются на панели, а запрос ограничен 15 секундами. Service worker v6.
+
+## Проверки
+
+- npm test: PASS (12 bridge tests, HARNESS_SMOKE_OK, HARNESS_RUNTIME_OK, HARNESS_CONTROLS_OK).
+- Controls: новый runId и working после единственного retry; повторный null-run retry и повторный queued retry не создают дубли; local command retry сохраняет параметры и исполняется из очереди; reset сохраняет прежний переход в ready.
+- Playwright: RETRY_ONE_CLICK_OK — кнопка Retry сразу переводит карточку в working с новым runId; повторный Run не нажимался. Полный browser controls сценарий и reload persistence сохранены, JS errors 0.
+- Реальный HCM: через кнопку Retry создан `run-1792943489185-2a942b63`, thread `01a173c2-859f-7e61-9181-6ec8155f5696`. Подтверждены thread.started, turn.started и сообщение исполнителя «Принял HCM-32…». Статус working, реальные сообщения поступают. КЭДО продолжает выполняться; её результат не объявлен завершённым.
+- git diff --check: PASS. Обновлённый сервер оставлен на 4173; закрыты только тестовый браузер и preview-сервер.
+
+Изменены: `server.js`, `board.js`, `sw.js`, `README.md`, `scripts/controls-test.mjs`, `scripts/runtime-test.mjs`, `scripts/browser-controls-probe.js` и `.harness`-протокол текущего запуска. Расшифровка: `.harness/runs/run-retry-start-20261025/messages.jsonl`.
+
+# Аудит управления задачами — проверено
+
+Причина отмены: runtime HCM-32 был ready/runId null, а сохранённая карточка — working со старым runId. controlTask допускал действия только для последнего активного запуска; клиент отдельно сохранял своё представление статуса. Предыдущие исправления проверяли части цикла, но не весь этот сценарий.
+
+## Изменения
+
+- Сервер сохраняет переходы в план с новой revision, очередь, историю и runtime. Браузер после действия читает серверное состояние и не записывает придуманный статус.
+- Cancel обслуживает активную, queued и готовую задачу без процесса. Очередь удаляется адресно; отмена одной карточки не меняет чужой активный запуск. Retry очищает runId и старые ошибки и сохраняет ready на диске.
+- Проверяется принадлежность runId задаче; запоздавшая команда не отменяет новую попытку. Старый результат можно подтвердить/вернуть во время другого запуска. Return переводит в ready без ложного working.
+- Пауза управляемого Codex останавливает процесс и сохраняет thread ID, Resume использует exec resume. Для IDE/человека остаётся файловый запрос управления, физическая остановка внешнего приложения не заявляется.
+- Локальные команды запускаются в фоне для UI, доступны для отмены, не перезаписывают занятого исполнителя и не восстанавливают working при позднем callback. Неподдерживаемая пауза скрыта.
+- Защищены статусы при сохранении плана, перетаскивании и редактировании. Удаление активной карточки сначала отменяет запуск. Повторные клики и смена проекта во время действия не записывают результат в другой проект.
+- Обновлён service worker до v5, описаны правила управления и команды проверок в README.
+
+## Проверки
+
+- npm test: PASS — синтаксис, 12 bridge tests, HARNESS_SMOKE_OK, HARNESS_RUNTIME_OK, HARNESS_CONTROLS_OK.
+- Отдельная controls-регрессия после финальных изменений: PASS; включает legacy ready/cancel, queued cancel, retry persistence, stale run, historical review, busy command, real command cancel, сохранение runtime-полей и конфликт revision.
+- Реальный Codex: HARNESS_REAL_CONTROLS_OK — turn.started, фактический pause, exec resume сохранённого thread, HARNESS_CONTROLS_RESUMED, completed.
+- Playwright в отдельном workspace: Run → Queue → queued Cancel; historical Complete/Return при занятом исполнителе; Pause/Resume; Cancel → Retry → новый Run; отмена настоящей CLI-команды; сохранение всех состояний после reload. Ошибок JS нет.
+- Playwright: HARNESS_BROWSER_DELETE_OK — удаление активной карточки сначала отменяет запуск, запись удалена, статус cancelled.
+- Реальный HCM: HCM_CANCEL_VERIFIED. API status cancelled/runId null; HCM-32 на диске и в браузере blocked, cancelled true, queued false. Очередь пуста, захвата HCM-32 нет. Текущий report — cancelled, прежние failed-отчёты сохранены.
+- git diff --check: PASS.
+
+Обновлённый сервер работает на 4173. Временные браузер и preview-сервер закрыты. Дополнительное удаление двух одноразовых preview-каталогов (`D:/Temp/harness-controls-JiwJnw`, `D:/Temp/harness-controls-0zQmGE`) отклонено автоматической проверкой; повторных попыток удаления не выполнялось.
+
+## Изменённые файлы
+
+`server.js`, `codex-bridge.js`, `board.js`, `sw.js`, `package.json`, `README.md`, `scripts/smoke.mjs`, `scripts/codex-bridge.test.cjs`, `scripts/controls-test.mjs`, `scripts/browser-controls-probe.js`, `scripts/probe-codex-controls.cjs`; `.harness/status.json`, `.harness/events.jsonl`, этот отчёт и `.harness/runs/run-task-controls-audit-20261025/*`. В HCM изменены только файлы `.harness` для согласования и отмены; код КЭДО не запускался.
+
+Расшифровка: `.harness/runs/run-task-controls-audit-20261025/messages.jsonl`.
+
+# Исправлен spawn codex ENOENT — проверено
+
+Поиск CLI не учитывал реальное размещение desktop-сборок: `%LOCALAPPDATA%/OpenAI/Codex/bin/<build-id>/codex.exe`. Предыдущий положительный smoke выполнялся внутри Codex с CODEX_APP_RUNTIME_CLI_PATH, поэтому не воспроизводил запуск приложения вне Codex.
+
+Добавлен поиск абсолютного пути по явной настройке, runtime environment, PATH и установленным каталогам версий. Повреждённые/незавершённые сборки пропускаются; неверный CODEX_CLI_PATH вызывает явную ошибку настройки.
+
+Проверено: npm test PASS (11 bridge tests, smoke, live worker runtime); --version настоящего CLI с полностью пустым PATH и без Codex env; полный bridge без Codex env/PATH получил HARNESS_STANDALONE_OK → turn.completed → completed, exitCode 0. Обновлённый сервер запущен на 4173. Неудачный HCM run сохранён, Retry вернул карточку КЭДО в ready, queue пустая. КЭДО повторно не запускалась.
+
+Изменены: `codex-bridge.js`, `scripts/codex-bridge.test.cjs`, `README.md`, `.harness/status.json`, `.harness/events.jsonl`, этот отчёт и `.harness/runs/run-standalone-cli-discovery-20261025/*`. Расшифровка и отдельный отчёт сохранены в каталоге запуска.
+
+# Исправление очереди и жизненного цикла Codex — проверено
+
+Причина: в HCM одна задача имела активный и queued run; браузер продлевал статус исполнителя без сообщений Codex; служебный `codex_started` скрывал отсутствие реального прогресса. Прошлая диагностика относилась только к Harness и не описывала HCM.
+
+Исправлено: идемпотентный запуск с приоритетом активного run, восстановление дубликатов при старте, синхронизация карточек с runtime, таймаут создания Codex-сессии 30 секунд, завершение только после `turn.completed`, единичная обработка error/close, остановка дочернего процесса при cancel/retry, защита статуса и latest report от событий старого run. Claim браузера больше не меняет активность исполнителя, терминальные запуски освобождают claim, панель не показывает ошибки прошлых попыток.
+
+## Выполненные проверки
+
+- `npm test`: PASS — 10 тестов bridge, включая остановку реального дочернего процесса; `HARNESS_SMOKE_OK`; `HARNESS_RUNTIME_OK` с включённым auto-dispatch.
+- Runtime-регрессия: потерянный запуск и дубликат очереди, heartbeat без изменения executor status, служебное сообщение без реального прогресса, автоматический dispatch после ошибки CLI, сохранение runId, отклонение старого control runId, освобождение claim.
+- Реальный Codex через исправленный bridge: thread.started → HARNESS_BRIDGE_OK → turn.completed → completed, exitCode 0. Это проверка транспорта, не приёмка КЭДО.
+- Playwright: HCM показал точную причину потери исполнителя и Retry; после клика Retry карточка показывает Run, панель ошибки скрыта. API: status ready, runId null, queue [], claim отсутствует.
+- `git diff --check`: PASS. Обновлённый сервер работает на 4173.
+
+КЭДО не запущена повторно автоматически: карточка готова к Run; реализация HCM в этой задаче не изменялась. История старых попыток сохранена, дубликат отменён. Изменены runtime-файлы HCM в `.harness` (status, queue, runs, report, events, claim и план после Retry).
+
+## Изменённые файлы Harness
+
+- `server.js`, `codex-bridge.js`, `board.js`, `sw.js`, `package.json`, `README.md`.
+- `scripts/test.mjs`, `scripts/codex-bridge.test.cjs`, `scripts/runtime-test.mjs`.
+- `.harness/status.json`, `.harness/events.jsonl`, `.harness/reports/latest.md`, `.harness/runs/run-executor-lifecycle-20261025/*`.
+
+Расшифровка: `.harness/runs/run-executor-lifecycle-20261025/messages.jsonl`.
+
+# Диагностика остановки Harness — 25.10.2026
+
+- Проверено: основной сервер Harness уже работал на `http://localhost:4173`.
+- API `/api/projects`, `/api/projects/harness/health` и `/api/projects/harness/state` отвечает успешно.
+- Health: все обязательные файлы валидны, предупреждений нет; очередь пуста.
+- Последний запуск завершён с `exitCode: 0`, состояние проекта — `completed`.
+- Второй диагностический экземпляр на `4174` остановлен; основной процесс на `4173` не трогался.
+
+## Проверки этого среза
+
+- `npm test`: PASS (`HARNESS_SMOKE_OK`).
+- HTTP-проверки портов `4173` и API: PASS.
+- Проверка слушающих процессов: оставлен один сервер Harness на `4173`.
+
 # Автоматическое обновление процессов
+
+## Обнаружение молчащего Codex bridge
+
+Если задача Codex остаётся `working`, но у её запуска нет `codex_progress`, `codex_thread_started`, `progressAt` и `messages.jsonl`, Harness теперь показывает явное предупреждение вместо имитации нормальной работы. В панели доступны отчёт и повторный запуск.
+
+В текущем HCM-запуске подтверждено: присутствуют только heartbeat `task_claimed`, сообщений Codex нет. Это означает, что текущая карточка не подключена к bridge; после перезапуска задачи новый запуск должен создать `messages.jsonl` и отображать прогресс.
+
+## Проверки этого среза
+
+- `npm test`: PASS.
+- `git diff --check`: PASS.
+- HCM API: предупреждение о молчащем bridge возвращается.
+- Playwright: в HCM видны предупреждение, `Open report` и `Retry`.
+
+## Проблемы выполнения и реакции
+
+На доске добавлена красная панель внимания для ошибок Codex, проблем файлового моста и stale-исполнителей. Панель показывает причину, открывает полный отчёт и предлагает повторить заблокированную задачу. Ошибочная карточка остаётся в `Заблокировано` до реакции пользователя.
+
+## Проверки этого среза
+
+- `npm test`: PASS.
+- `git diff --check`: PASS.
+- Playwright на изолированном failed-проекте: PASS. Панель показала причину, `Open report` и `Retry`; карточка отображалась в `Blocked` с действием `Retry`.
+
+## Изменённые файлы
+
+- `board.js`
+- `style.css`
+- `i18n.js`
+
+## Обновление AGENTS.md при старте
+
+Harness при запуске теперь проверяет подключённые проекты и дописывает только недостающие правила протокола в существующий `AGENTS.md`: промежуточные отчёты и полный журнал `messages.jsonl`. Перед изменением создаётся backup внутри `.harness`, пользовательские инструкции сохраняются.
+
+## Проверки этого среза
+
+- `npm test`: PASS.
+- `git diff --check`: PASS.
+- Изолированный проект со старым `AGENTS.md`: `AGENT_STARTUP_MIGRATION_OK`.
+
+## Изменённые файлы
+
+- `server.js`
+
+## Полный журнал сообщений Codex
+
+Codex-мост теперь извлекает текст из вложенных JSON-событий, сохраняет все сообщения запуска в `.harness/runs/<runId>/messages.jsonl` и строит текущий/финальный отчёт по всей истории. Финальный статус больше не стирает историю сообщений.
+
+## Проверки этого среза
+
+- `npm test`: PASS.
+- `git diff --check`: PASS.
+- Проверка вложенного `item.content[].text` и обычного `message`: PASS.
+
+## Изменённые файлы
+
+- `codex-bridge.js`
+- `server.js`
+- `AGENTS.md`
 
 ## Уточнено правило для исполнителей
 
@@ -123,3 +288,34 @@ Codex-мост теперь записывает промежуточный пр
 - Предупреждение stale-задачи больше не маскируется под общую проблему файлового моста.
 - Проверки: `npm test` с отключённым Codex bridge и `git diff --check`.
 - Изменены файлы: `server.js`, `board.js`.
+
+## Исправлен запуск Codex bridge
+
+- Причина ошибки `codexBridge.start(...).catch is not a function`: `CodexBridge.start()` возвращает обычный объект запуска, а не Promise.
+- Запуск обёрнут в `Promise.resolve().then(...)`, поэтому синхронные ошибки bridge попадают в `codex_bridge_error` и runtime-статус, а HTTP-обработчик создания задачи не падает.
+- Проверки: `npm test`, `git diff --check`.
+- Изменён файл: `server.js`.
+
+## Увеличено время показа уведомлений
+
+- Всплывающие уведомления Harness теперь остаются видимыми 8 секунд вместо 2,6 секунды.
+- При новом уведомлении предыдущий таймер сбрасывается, поэтому сообщения не исчезают раньше времени из-за повторного вызова `toast`.
+- Проверки: `npm test`, `git diff --check`.
+- Изменён файл: `app.js`.
+
+## Исправлено отображение поставленной в очередь задачи
+
+- Причина: при занятом исполнителе API возвращает `queued: true`, но карточка оставалась визуально обычной задачей в колонке «К выполнению».
+- Для queued-карточки добавлена явная пометка «В очереди на запуск» и убрана повторная кнопка запуска.
+- Уведомление уточнено: задача передана Harness, а при занятом исполнителе ожидает в очереди.
+- При загрузке доски queued-состояние восстанавливается из `.harness/queue.json`.
+- Проверки: `npm test`, `git diff --check`.
+- Изменены файлы: `app.js`, `board.js`, `i18n.js`.
+
+## Добавлена проверка задвоения запусков
+
+- Сервер теперь проверяет `taskId` в активном запуске и в очереди до создания нового run.
+- Повторный запрос возвращает существующий `runId` с `duplicate: true`, а событие `duplicate_task_request` попадает в аудит.
+- Добавлен smoke-тест для повторной отправки активной задачи; проверка задвоения queued-задачи уже выполнялась и сохранена.
+- Проверки: `npm test`, `git diff --check`.
+- Изменены файлы: `server.js`, `scripts/smoke.mjs`.

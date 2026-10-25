@@ -8,7 +8,7 @@ const port = process.env.HARNESS_TEST_PORT || '43173';
 const baseUrl = `http://127.0.0.1:${port}`;
 const server = spawn(process.execPath, ['server.js'], {
   cwd: process.cwd(),
-  env: { ...process.env, HARNESS_PORT: port, HARNESS_WORKSPACE: workspace, HARNESS_AUTO_DISPATCH: 'false' },
+  env: { ...process.env, HARNESS_PORT: port, HARNESS_WORKSPACE: workspace, HARNESS_AUTO_DISPATCH: 'false', HARNESS_CODEX_BRIDGE: 'false' },
   stdio: 'inherit',
   windowsHide: true,
 });

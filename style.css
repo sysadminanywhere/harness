@@ -40,3 +40,4 @@
 
 .live-status { display: block; margin-top: 8px; color: #7fc5a5; font-size: 12px; }
 .live-status.disconnected { color: #e9b86e; }
+.attention-panel{border:1px solid #704238;border-radius:8px;background:linear-gradient(110deg,#2b1c19,#211817);padding:12px 14px;margin:-3px 0 14px;color:#f0d2c8;display:flex;align-items:center;gap:14px}.attention-panel[hidden]{display:none}.attention-panel strong{color:#f0b5a3;font-size:11px;white-space:nowrap}.attention-panel p{margin:0;font-size:10px;line-height:1.6;overflow-wrap:anywhere;flex:1}.attention-panel-actions{display:flex;gap:7px;flex-wrap:wrap}.attention-panel .button{padding:7px 10px;font-size:10px}.attention-panel .button.primary{background:#e7a292;border-color:#e7a292;color:#321b17;width:auto}.attention-panel .button.secondary{background:#32211e;border-color:#704238;color:#f0d2c8}

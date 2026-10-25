@@ -206,6 +206,20 @@ POST /api/projects/<project-id>/queue/next
 
 An executor can inspect the queue and claim the next task after the active task reaches a terminal state.
 
+Repeated starts of the same active or queued task reuse its run ID. Browser polling does not count as executor progress. The Codex bridge waits up to 30 seconds for a thread ID (`HARNESS_CODEX_START_TIMEOUT_MS` overrides this startup limit); a zero exit code requires `turn.completed` before the run is accepted as successful. Cancel and retry terminate the managed process, and late events cannot overwrite a newer run.
+
+The bridge resolves an absolute CLI path from `CODEX_CLI_PATH`, the desktop runtime environment, `PATH`, or Windows desktop installations under `%LOCALAPPDATA%\OpenAI\Codex\bin\<build-id>\codex.exe`. This also works when Harness starts outside Codex. An invalid explicit `CODEX_CLI_PATH` produces a configuration error rather than silently selecting another executable.
+
+On server restart, duplicate queued requests are cancelled and a lost Codex run is marked failed with a report. Retry starts a new attempt immediately, or queues it if another task owns the executor. Repeated delivery of the same Retry request returns the same new run ID. Dragging a blocked card to To do uses Reset instead and does not start an executor. Historical failures remain in run history without keeping the current attention panel open.
+
+Task controls persist on the server, including card status, queue membership, run history and claims. Cancel also works for a queued task or a task without a running process. A stale run ID cannot cancel a newer attempt. Retry starts a new run; Reset returns the card to To do without running it. Results can be accepted or returned while another task is running; Return moves the card to To do for a new attempt. Deleting an active card first cancels its run.
+
+Codex Pause stops the managed process and retains the thread ID; Resume continues that session (or restarts the attempt if a session had not yet been created). Local PowerShell/CLI commands run in the background and support cancellation, but do not advertise pause. IDE and human executors receive file-protocol control requests; Harness cannot physically suspend an external IDE process.
+
+Each Codex child uses its own `.harness/runs/<runId>/tmp` for TEMP/TMP. This keeps the Windows sandbox from trying to modify ACLs on a shared system temp root. Sandbox setup failures are recorded as failed attempts even if the model exits with code zero. `node scripts/probe-codex-tools.cjs` verifies actual terminal execution inside the sandbox, rather than just receiving a model response. See the [official Windows sandbox documentation](https://learn.chatgpt.com/docs/windows/windows-sandbox).
+
+`npm test` includes the lifecycle controls regression suite. Optional live checks: `node scripts/probe-codex-controls.cjs` validates real Codex pause/resume using the signed-in account; `node scripts/controls-test.mjs --preview` creates a disposable browser workspace. Open its printed URL, select Browser controls, then run `playwright-cli run-code --filename scripts/browser-controls-probe.js`.
+
 ## Import and export
 
 Use the `Import` button on the board to import:

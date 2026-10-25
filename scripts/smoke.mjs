@@ -107,6 +107,8 @@ try {
   if (cycleResponse.status !== 400) throw new Error('Dependency cycle was accepted');
   const taskRequest = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-task', title: 'Executor contract', executor: 'powershell', plan: [{ id: 'plan-api', title: 'Implement API', description: 'Create the endpoint' }, { id: 'plan-tests', title: 'Add tests', dependsOn: ['plan-api'] }] }) });
   if (taskRequest.executor !== 'powershell') throw new Error('Executor contract is missing from task request');
+  const duplicateActiveTask = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-task', title: 'Executor contract', executor: 'powershell' }) });
+  if (!duplicateActiveTask.duplicate || duplicateActiveTask.runId !== taskRequest.runId) throw new Error('Duplicate active task created a second run');
   const taskState = await request(`/api/projects/${temporaryProject.id}/state`);
   if (taskState.status?.executor !== 'powershell') throw new Error('Executor contract is missing from status');
   if (!taskState.currentTask.includes('## План') || !taskState.currentTask.includes('[plan:plan-api] Implement API') || !taskState.currentTask.includes('```json') || !taskState.currentTask.includes('"id": "plan-api"') || !taskState.currentTask.includes('plan-tests')) throw new Error('LLM plan was not written to current-task.md');
@@ -142,6 +144,9 @@ try {
   fs.writeFileSync(path.join(temporaryProjectPath, '.harness', 'status.json'), JSON.stringify({ ...taskState.status, updatedAt: new Date(Date.now() - 31 * 60 * 1000).toISOString() }));
   const staleState = await request(`/api/projects/${temporaryProject.id}/state`);
   if (!staleState.health?.warnings?.some((warning) => warning.includes('30 минут'))) throw new Error('Stale task warning is missing');
+  const busyCommand = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'must-not-overwrite', executor: 'cli', adapter: 'git-status', confirmed: true }) });
+  if (busyCommand.status !== 409) throw new Error('Command overwrote the active executor');
+  await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: staleState.status.taskId, runId: staleState.status.runId, action: 'cancel' }) });
   const dryRun = await request(`/api/projects/${temporaryProject.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-command', command: 'Write-Output HARNESS_SMOKE', executor: 'powershell', dryRun: true }) });
   if (!dryRun.dryRun || dryRun.cwd !== temporaryProjectPath || dryRun.requiresConfirmation !== true) throw new Error('PowerShell dry-run contract is invalid');
   if (process.platform === 'win32') {
