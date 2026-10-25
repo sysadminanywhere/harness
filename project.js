@@ -10,7 +10,7 @@ const projectPolicy = document.createElement('select'); projectPolicy.id = 'proj
 let projects = [];
 const onboardingStorageKey = 'harness-onboarding-complete';
 function showProjectOnboarding() {
-  if (localStorage.getItem(onboardingStorageKey)) return;
+  if (localStorage.getItem(onboardingStorageKey) || projects.length > 1) return;
   const english = window.harnessI18n?.getLanguage() !== 'ru';
   const dialog = document.createElement('dialog');
   dialog.id = 'onboarding-dialog';

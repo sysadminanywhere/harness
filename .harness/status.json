@@ -1,10 +1,10 @@
 {
   "status": "completed",
-  "taskId": "ready-column-label-20261025",
-  "title": "Понятное название колонки ready",
+  "taskId": "executor-live-report-20261025",
+  "title": "Показывать отчёт исполнителя на доске",
   "executor": "codex",
   "source": "codex",
-  "updatedAt": "2026-10-25T14:20:00.000Z",
+  "updatedAt": "2026-10-25T15:00:00.000Z",
   "exitCode": 0,
   "runId": "run-1792924439152-7f79eff0",
   "migratedAt": "2026-10-25T10:33:59.155Z"

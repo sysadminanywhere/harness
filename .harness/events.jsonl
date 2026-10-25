@@ -209,3 +209,9 @@
 {"type":"task_completed","taskId":"hcm-ideas-visibility-20261025","source":"codex","at":"2026-10-25T14:10:00.000Z","checks":["npm test","git diff --check","HCM API: 7 ideas normalized to inbox"],"files":["server.js","scripts/smoke.mjs"]}
 {"type":"task_started","taskId":"ready-column-label-20261025","source":"codex","title":"Понятное название колонки ready","at":"2026-10-25T14:20:00.000Z"}
 {"type":"task_completed","taskId":"ready-column-label-20261025","source":"codex","at":"2026-10-25T14:20:00.000Z","checks":["npm test","git diff --check"],"files":["i18n.js"]}
+{"type":"task_started","taskId":"run-button-overlay-20261025","source":"codex","title":"Исправить запуск карточки через onboarding-overlay","at":"2026-10-25T14:30:00.000Z"}
+{"type":"task_completed","taskId":"run-button-overlay-20261025","source":"codex","at":"2026-10-25T14:30:00.000Z","checks":["npm test","git diff --check","Playwright: HCM Run button click"],"files":["project.js"]}
+{"type":"task_started","taskId":"board-card-responsive-20261025","source":"codex","title":"Адаптировать карточки доски к узким колонкам","at":"2026-10-25T14:40:00.000Z"}
+{"type":"task_completed","taskId":"board-card-responsive-20261025","source":"codex","at":"2026-10-25T14:45:00.000Z","checks":["npm test","git diff --cached --check"],"files":["style.css"]}
+{"type":"task_started","taskId":"executor-live-report-20261025","source":"codex","title":"Показывать отчёт исполнителя на доске","at":"2026-10-25T15:00:00.000Z"}
+{"type":"task_completed","taskId":"executor-live-report-20261025","source":"codex","at":"2026-10-25T15:10:00.000Z","checks":["npm test","git diff --cached --check","DOM implementation: executor-pulse rendered from status/events/report"],"files":["index.html","board.js","style.css","i18n.js"]}
