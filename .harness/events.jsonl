@@ -215,3 +215,5 @@
 {"type":"task_completed","taskId":"board-card-responsive-20261025","source":"codex","at":"2026-10-25T14:45:00.000Z","checks":["npm test","git diff --cached --check"],"files":["style.css"]}
 {"type":"task_started","taskId":"executor-live-report-20261025","source":"codex","title":"Показывать отчёт исполнителя на доске","at":"2026-10-25T15:00:00.000Z"}
 {"type":"task_completed","taskId":"executor-live-report-20261025","source":"codex","at":"2026-10-25T15:10:00.000Z","checks":["npm test","git diff --cached --check","DOM implementation: executor-pulse rendered from status/events/report"],"files":["index.html","board.js","style.css","i18n.js"]}
+{"type":"task_started","taskId":"readme-english-screenshot-20261025","source":"codex","title":"Обновить скриншот интерфейса в README","at":"2026-10-25T15:20:00.000Z"}
+{"type":"task_completed","taskId":"readme-english-screenshot-20261025","source":"codex","at":"2026-10-25T15:20:00.000Z","checks":["README image reference","git diff --cached --check"],"files":["docs/harness-lab-en.png"]}
