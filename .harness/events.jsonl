@@ -199,3 +199,6 @@
 {"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T12:10:00.000Z","taskId":"roadmap-stage-7-20261025","scope":["runtime backup API","plan/status/queue/run snapshot","backup smoke regression"],"checks":["npm test"]}
 {"type":"roadmap_stage_completed","source":"codex","at":"2026-10-25T12:35:00.000Z","taskId":"roadmap-stage-8-20261025","scope":["retention preview","confirm-required archive","backup/run retention smoke regression"],"checks":["npm test"]}
 {"type":"roadmap_completed","source":"codex","at":"2026-10-25T13:00:00.000Z","taskId":"roadmap-final-20261025","checks":["npm test","npm run package:pwa","git diff --cached --check"],"docs":["docs/FUTURE_IMPROVEMENTS_PLAN.md","docs/ACCEPTANCE.md","docs/INTEGRATIONS.md"]}
+{"type":"task_started","taskId":"live-refresh-20261025","source":"codex","title":"Автоматическое обновление процессов","at":"2026-10-25T10:09:39.726Z"}
+{"type":"legacy_run_migrated","taskId":"live-refresh-20261025","runId":"run-1792922980167-c5e23dd4","at":"2026-10-25T10:09:40.171Z"}
+{"type":"task_completed","taskId":"live-refresh-20261025","source":"codex","at":"2026-10-25T10:13:14.461Z","checks":["npm test","git diff --check","Playwright: external plan, draft preservation, report/events, disconnect recovery, filters"]}

@@ -1,14 +1,11 @@
 {
   "status": "completed",
-  "status": "completed",
-  "taskId": "roadmap-final-20261025",
-  "title": "Завершить локальный roadmap и документировать интеграции",
+  "taskId": "live-refresh-20261025",
+  "title": "Автоматическое обновление процессов",
   "executor": "codex",
   "source": "codex",
-  "command": null,
-  "cwd": "D:\\GitHub\\harness",
-  "updatedAt": "2026-10-25T13:00:00.000Z",
-  "exitCode": 0
-  "exitCode": 0
+  "updatedAt": "2026-10-25T10:13:14.461Z",
+  "runId": "run-1792922980167-c5e23dd4",
+  "migratedAt": "2026-10-25T10:09:40.170Z",
   "exitCode": 0
 }
