@@ -53,6 +53,18 @@ if (!boardSource.includes('event.source || event.executor || event.claimedBy || 
 if (!boardSource.includes('showPlanPreview') || !boardSource.includes('dependsOn') || !boardSource.includes('claimCard') || !boardSource.includes('heartbeatCard') || !boardSource.includes('data-release-id') || !boardSource.includes('renderDependencyGraph') || !boardSource.includes('eventsSearch') || !boardSource.includes('lastWarning')) throw new Error('Plan orchestration support is incomplete');
 
 const temporaryProjectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-smoke-'));
+const compatibilityProjectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-compatibility-'));
+const compatibilityPlan = { columns: [{ id: 'inbox', title: 'Идеи' }, { id: 'done', title: 'Завершено' }], cards: [{ id: 'legacy-idea', status: 'idea', column: 'inbox' }, { id: 'legacy-completed', status: 'completed', column: 'done' }] };
+let compatibilityProject;
+try {
+  compatibilityProject = await request('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Compatibility plan', path: compatibilityProjectPath }) });
+  await request(`/api/projects/${compatibilityProject.id}/plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(compatibilityPlan) });
+  const normalizedState = await request(`/api/projects/${compatibilityProject.id}/state`);
+  if (normalizedState.plan.cards.find((card) => card.id === 'legacy-idea')?.status !== 'inbox' || normalizedState.plan.cards.find((card) => card.id === 'legacy-completed')?.status !== 'done') throw new Error('Legacy plan statuses were not normalized');
+} finally {
+  if (compatibilityProject) await request(`/api/projects/${compatibilityProject.id}`, { method: 'DELETE' });
+  fs.rmSync(compatibilityProjectPath, { recursive: true, force: true });
+}
 let temporaryProject;
 let policyProject;
 let policyPath;

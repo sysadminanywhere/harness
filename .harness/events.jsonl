@@ -202,3 +202,10 @@
 {"type":"task_started","taskId":"live-refresh-20261025","source":"codex","title":"Автоматическое обновление процессов","at":"2026-10-25T10:09:39.726Z"}
 {"type":"legacy_run_migrated","taskId":"live-refresh-20261025","runId":"run-1792922980167-c5e23dd4","at":"2026-10-25T10:09:40.171Z"}
 {"type":"task_completed","taskId":"live-refresh-20261025","source":"codex","at":"2026-10-25T10:13:14.461Z","checks":["npm test","git diff --check","Playwright: external plan, draft preservation, report/events, disconnect recovery, filters"]}
+{"type":"task_started","taskId":"button-label-20261025","source":"codex","title":"Универсальная подпись кнопки запуска","at":"2026-10-25T14:00:00.000Z"}
+{"type":"task_completed","taskId":"button-label-20261025","source":"codex","at":"2026-10-25T14:00:00.000Z","checks":["git diff --check"],"files":["i18n.js"]}
+{"type":"legacy_run_migrated","taskId":"button-label-20261025","runId":"run-1792924439152-7f79eff0","at":"2026-10-25T10:33:59.156Z"}
+{"type":"task_started","taskId":"hcm-ideas-visibility-20261025","source":"codex","title":"Показ идей HCM в интерфейсе","at":"2026-10-25T14:10:00.000Z"}
+{"type":"task_completed","taskId":"hcm-ideas-visibility-20261025","source":"codex","at":"2026-10-25T14:10:00.000Z","checks":["npm test","git diff --check","HCM API: 7 ideas normalized to inbox"],"files":["server.js","scripts/smoke.mjs"]}
+{"type":"task_started","taskId":"ready-column-label-20261025","source":"codex","title":"Понятное название колонки ready","at":"2026-10-25T14:20:00.000Z"}
+{"type":"task_completed","taskId":"ready-column-label-20261025","source":"codex","at":"2026-10-25T14:20:00.000Z","checks":["npm test","git diff --check"],"files":["i18n.js"]}

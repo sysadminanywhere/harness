@@ -1,11 +1,11 @@
 {
   "status": "completed",
-  "taskId": "live-refresh-20261025",
-  "title": "Автоматическое обновление процессов",
+  "taskId": "ready-column-label-20261025",
+  "title": "Понятное название колонки ready",
   "executor": "codex",
   "source": "codex",
-  "updatedAt": "2026-10-25T10:13:14.461Z",
-  "runId": "run-1792922980167-c5e23dd4",
-  "migratedAt": "2026-10-25T10:09:40.170Z",
-  "exitCode": 0
+  "updatedAt": "2026-10-25T14:20:00.000Z",
+  "exitCode": 0,
+  "runId": "run-1792924439152-7f79eff0",
+  "migratedAt": "2026-10-25T10:33:59.155Z"
 }
