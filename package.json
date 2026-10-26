@@ -4,7 +4,7 @@
   "description": "Local-first project planning workspace with Kanban and desktop apps",
   "author": {
     "name": "Sysadmin Anywhere",
-    "email": "info@sysadminanywhere.com"
+    "email": "info@ria-media.net"
   },
   "private": true,
   "main": "electron/main.js",
