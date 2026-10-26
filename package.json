@@ -13,7 +13,7 @@
     "desktop": "electron .",
     "check": "node --check app.js && node --check board.js && node --check project.js && node --check planner.js && node --check i18n.js && node --check sw.js && node --check server.js && node --check codex-bridge.js && node --check scripts/test.mjs && node --check scripts/smoke.mjs && node --check scripts/create-icons.mjs && node --check electron/main.js",
     "smoke": "node scripts/smoke.mjs",
-    "test": "npm run check && node --test scripts/codex-bridge.test.cjs && node scripts/test.mjs && node scripts/runtime-test.mjs && node scripts/controls-test.mjs",
+    "test": "npm run check && node --test scripts/codex-bridge.test.cjs scripts/model-settings.test.cjs && node scripts/test.mjs && node scripts/runtime-test.mjs && node scripts/controls-test.mjs && node scripts/audit-test.mjs",
     "prepare:icons": "node scripts/create-icons.mjs",
     "package:pwa": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-pwa.ps1",
     "package:desktop": "npm run package:desktop:win",
@@ -30,12 +30,15 @@
     "productName": "Harness Lab",
     "electronDist": "node_modules/electron/dist",
     "asarUnpack": [
-      "server.js"
+      "server.js",
+      "codex-bridge.js",
+      "model-settings.js"
     ],
     "files": [
       "app.js",
       "board.js",
       "codex-bridge.js",
+      "model-settings.js",
       "data/board.json",
       "electron/**/*",
       "favicon.svg",

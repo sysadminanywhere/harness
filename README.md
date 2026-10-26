@@ -218,7 +218,19 @@ Codex Pause stops the managed process and retains the thread ID; Resume continue
 
 Each Codex child uses its own `.harness/runs/<runId>/tmp` for TEMP/TMP. This keeps the Windows sandbox from trying to modify ACLs on a shared system temp root. Sandbox setup failures are recorded as failed attempts even if the model exits with code zero. `node scripts/probe-codex-tools.cjs` verifies actual terminal execution inside the sandbox, rather than just receiving a model response. See the [official Windows sandbox documentation](https://learn.chatgpt.com/docs/windows/windows-sandbox).
 
+To check a particular repository without executing its implementation task, run `node scripts/probe-codex-tools.cjs D:\GitHub\hcm`. The probe only asks Codex to print a marker; Harness creates its run-specific temporary directory. It does not stage, commit or delete files in that repository. On startup Harness repairs old, unaccepted `completed` Codex runs when their transcripts show an unresolved sandbox failure. Original run records and reports are backed up; successful tool recovery and user-accepted results are preserved. Errors returned through MCP tools also prevent a false successful completion.
+
 `npm test` includes the lifecycle controls regression suite. Optional live checks: `node scripts/probe-codex-controls.cjs` validates real Codex pause/resume using the signed-in account; `node scripts/controls-test.mjs --preview` creates a disposable browser workspace. Open its printed URL, select Browser controls, then run `playwright-cli run-code --filename scripts/browser-controls-probe.js`.
+
+## Models for tasks and scopes
+
+Open **Settings** (⚙ Настройки) to choose the project's default Codex model. Edit a global task to set a model for its scope; children inherit it. Edit an individual task to override that choice. The order is task → nearest parent scope → project → Codex configuration. An empty selection inherits from the next level.
+
+The picker reads visible entries from the local Codex model catalog and also accepts a custom model ID. The catalog may be cached; actual model access is checked by Codex at execution time. Harness passes an explicit selection through [`codex exec --model`](https://learn.chatgpt.com/docs/developer-commands?surface=cli); it does not silently substitute another model.
+
+The selected model and its source are saved in the request, run history and report. Queued attempts keep their selection even if a scope or project default changes later. Resume keeps the attempt's model; Retry creates a new attempt using the task's current settings. Editing settings does not switch a running attempt. PowerShell, CLI and human executors do not use the Codex model picker.
+
+Model regression checks are included in `npm test`. For the browser flow, run `node scripts/controls-test.mjs --preview`, open its URL, select Browser controls, then use `playwright-cli run-code --filename scripts/browser-models-probe.js`.
 
 ## Import and export
 
@@ -254,8 +266,12 @@ The planner endpoint is local and deterministic. It does not proxy prompts to an
 
 ## Security and safety model
 
+The **Execution** tab and sidebar history show actual project runs, events and saved reports. **New plan** opens the local planner; it creates board cards and retains the goal and constraints in each step. The previous simulated execution screen has been removed. See [workflow corrections and verification](docs/WORKFLOW_CORRECTIONS.md).
+
+The [implementation audit](docs/IMPLEMENTATION_AUDIT.md) records verified lifecycle, persistence, browser and Windows packaging checks, fixes, and remaining platform verification limits. Run `npm test` for the API/regression suite; `node scripts/package-probe.mjs release/audit-desktop-final/win-unpacked` checks an unpacked Windows build's actual Electron Node runtime.
+
 - No external AI API calls or API keys.
-- No automatic command execution: local commands require an explicit UI confirmation unless they are only being previewed.
+- Manual local commands require explicit confirmation. Automatic execution is limited to the project's enabled adapters and policy; cards marked for dry-run are excluded from automatic pickup.
 - Dry-run is available before execution.
 - CLI executable allowlist and shell-free argument execution.
 - Project working-directory restriction.

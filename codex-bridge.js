@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, execFileSync } = require('node:child_process');
+const { normalizeModel } = require('./model-settings');
 
 function findCodex({ env = process.env, platform = process.platform } = {}) {
   const isFile = (file) => { try { return Boolean(file) && fs.statSync(file).isFile(); } catch { return false; } };
@@ -32,6 +33,14 @@ function findCodex({ env = process.env, platform = process.platform } = {}) {
 
 const textKeys = new Set(['message', 'text', 'summary', 'content', 'output', 'aggregated_output', 'delta', 'detail', 'reason']);
 const sandboxFailurePattern = /helper_unknown_error|setup refresh had errors|windows sandbox failed|Failed to create unified exec process/i;
+function sandboxFailureAfter(progress, previous = null) {
+  if (progress.itemType === 'command_execution' && progress.exitCode === 0 && progress.itemStatus === 'completed') return null;
+  const message = progress.message || '';
+  if (sandboxFailurePattern.test(message) && (progress.itemType !== 'agent_message' || /не удалось|не смог|недоступн|unable to|could not|cannot|can't/i.test(message))) {
+    return 'Windows sandbox: setup refresh had errors; инструменты Codex не запустились.';
+  }
+  return previous;
+}
 function prepareCodexEnvironment(project, run, env = process.env) {
   const temp = path.resolve(project.path, '.harness', 'runs', run.runId, 'tmp');
   fs.mkdirSync(temp, { recursive: true });
@@ -80,10 +89,11 @@ class CodexBridge {
   }
 
   start(project, input, run) {
-    const prompt = [`Harness task: ${input.title}`, '', input.description || '', '', 'Acceptance criteria:', ...(input.criteria || []).map((item) => `- ${item}`), '', 'Work in this project and report meaningful progress in the Codex thread. Finish with a concise summary.'].join('\n');
+    const prompt = [`Harness task: ${input.title}`, '', input.description || '', '', 'Acceptance criteria:', ...(input.criteria || []).map((item) => `- ${item}`), '', 'Constraints:', input.constraints || 'Follow the project instructions.', '', `Harness owns the execution lifecycle for run ${run.runId}. Read .harness/current-task.md and project instructions before implementation. Preserve taskId and runId in Harness runtime files; do not replace the active run or claim a different task. Report progress in the Codex thread. Do not report success when required tools or checks failed. Finish with a concise summary of changes and checks.`].join('\n');
     if (!this.isCurrent(project, run.runId)) return { runId: run.runId, status: 'cancelled' };
     if (this.active.has(project.path)) throw new Error('Previous Codex process is still running');
-    const args = ['exec', '--json', '--cd', project.path, '--sandbox', 'workspace-write', '--thread-source', 'harness', ...(input.resumeThreadId ? ['resume', input.resumeThreadId] : []), prompt];
+    const model = normalizeModel(input.model);
+    const args = ['exec', '--json', ...(model ? ['--model', model] : []), '--cd', project.path, '--sandbox', 'workspace-write', '--thread-source', 'harness', ...(input.resumeThreadId ? ['resume', input.resumeThreadId] : []), prompt];
     const child = this.spawnProcess(findCodex(), args, { cwd: project.path, env: this.prepareEnvironment(project, run), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let buffer = '';
     let threadId = null;
@@ -121,10 +131,7 @@ class CodexBridge {
       }
       if (event.type === 'turn.completed') turnCompleted = true;
       if (event.type === 'turn.failed') turnFailed = true;
-      if (event.type === 'item.completed' && event.item?.type === 'command_execution') {
-        if (event.item.exit_code === 0 && event.item.status === 'completed') infrastructureFailure = null;
-        else if (sandboxFailurePattern.test(event.item.aggregated_output || '')) infrastructureFailure = 'Windows sandbox: setup refresh had errors; инструменты Codex не запустились.';
-      }
+      infrastructureFailure = sandboxFailureAfter({ message: eventMessage(event), itemType: event.item?.type, itemStatus: event.item?.status, exitCode: event.type === 'item.completed' ? event.item?.exit_code : undefined }, infrastructureFailure);
       if (event.type === 'turn.failed' || event.type === 'error') failure = eventMessage(event) || event.error?.message || 'Codex сообщил об ошибке.';
       const meaningful = ['thread.started', 'turn.started', 'turn.completed', 'turn.failed', 'item.started', 'item.completed', 'error'].includes(event.type);
       const message = eventMessage(event);
@@ -156,4 +163,4 @@ class CodexBridge {
   }
 }
 
-module.exports = { CodexBridge, eventMessage, findCodex, terminateProcessTree, prepareCodexEnvironment };
+module.exports = { CodexBridge, eventMessage, findCodex, terminateProcessTree, prepareCodexEnvironment, sandboxFailureAfter };

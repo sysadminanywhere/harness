@@ -2,8 +2,9 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFile, execFileSync } = require('node:child_process');
-const { randomUUID } = require('node:crypto');
-const { CodexBridge, terminateProcessTree } = require('./codex-bridge');
+const { randomUUID, createHash } = require('node:crypto');
+const { CodexBridge, terminateProcessTree, sandboxFailureAfter } = require('./codex-bridge');
+const { normalizeModel, resolveTaskModel, readModelCatalog } = require('./model-settings');
 
 const root = path.resolve(process.env.HARNESS_APP_ROOT || __dirname);
 const workspaceRoot = path.resolve(process.env.HARNESS_WORKSPACE || root);
@@ -24,7 +25,7 @@ const defaultBoard = {
   cards: [],
   events: []
 };
-const controlStatuses = { pause: 'paused', resume: 'working', cancel: 'cancelled', retry: 'working', reset: 'ready', complete: 'completed', return: 'ready' };
+const controlStatuses = { pause: 'paused', resume: 'working', cancel: 'cancelled', retry: 'working', reset: 'ready', complete: 'completed', return: 'ready', submit: 'completed' };
 const staleTaskMs = 30 * 60 * 1000;
 const autoDispatchEnabled = process.env.HARNESS_AUTO_DISPATCH !== 'false';
 const autoDispatchIntervalMs = Number(process.env.HARNESS_AUTO_DISPATCH_INTERVAL_MS || 1500);
@@ -48,13 +49,34 @@ function writeJson(file, value) { fs.mkdirSync(path.dirname(file), { recursive: 
 function writeText(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); const temporary = `${file}.tmp`; fs.writeFileSync(temporary, value); fs.renameSync(temporary, file); }
 function backupFile(file, backupDir, prefix) { if (!fs.existsSync(file)) return; fs.mkdirSync(backupDir, { recursive: true }); let name = `${prefix}-${Date.now()}`; let suffix = 0; while (fs.existsSync(path.join(backupDir, `${name}.bak`))) name = `${prefix}-${Date.now()}-${++suffix}`; fs.copyFileSync(file, path.join(backupDir, `${name}.bak`)); }
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } }
-function normalizePlan(plan) { if (!plan || !Array.isArray(plan.cards)) return plan; return { ...plan, cards: plan.cards.map((card) => ({ ...card, status: statusAliases[card.status] || card.status || card.column || 'inbox' })) }; }
-function fileHealth(file) { try { JSON.parse(fs.readFileSync(file, 'utf8')); return { valid: true }; } catch (error) { return { valid: false, error: error.message }; } }
+function validateTaskInput(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return 'Invalid task';
+  for (const field of ['criteria', 'dependencies', 'plan']) if (input[field] !== undefined && !Array.isArray(input[field])) return `Invalid ${field}`;
+  if (input.criteria?.some((value) => typeof value !== 'string') || input.dependencies?.some((value) => typeof value !== 'string')) return 'Invalid task list';
+  if (input.executor !== undefined && !Object.hasOwn(executorRules, input.executor)) return 'Invalid executor';
+  return null;
+}
+function validatePlan(plan) {
+  if (!plan || !Array.isArray(plan.cards) || !Array.isArray(plan.columns) || !plan.columns.length || (plan.events !== undefined && !Array.isArray(plan.events))) return 'Invalid plan';
+  const ids = new Set(), columnIds = new Set();
+  for (const column of plan.columns) { if (!column || typeof column.id !== 'string' || !column.id || columnIds.has(column.id)) return 'Invalid or duplicate column'; columnIds.add(column.id); }
+  for (const card of plan.cards) {
+    if (!card || typeof card.id !== 'string' || !/^[a-zA-Z0-9_а-яёА-ЯЁ:.-]+$/.test(card.id) || ids.has(card.id) || (card.title !== undefined && (typeof card.title !== 'string' || !card.title.trim()))) return 'Invalid or duplicate card';
+    const error = validateTaskInput(card); if (error) return error;
+    ids.add(card.id);
+  }
+  const cards = new Map(plan.cards.map((card) => [card.id, card]));
+  for (const card of plan.cards) { const ancestors = new Set([card.id]); let parent = card.parentId; while (parent && cards.has(parent)) { if (ancestors.has(parent)) return 'Parent cycle detected'; ancestors.add(parent); parent = cards.get(parent).parentId; } }
+  return null;
+}
+function normalizePlan(plan) { if (validatePlan(plan)) return structuredClone(defaultBoard); return { ...plan, cards: plan.cards.map((card) => ({ ...card, title: card.title || card.id, status: statusAliases[card.status] || card.status || card.column || 'inbox' })) }; }
+function fileHealth(file) { try { const value = JSON.parse(fs.readFileSync(file, 'utf8')); if (path.basename(file) === 'plan.json') { const error = validatePlan(value); if (error) return { valid: false, error }; } return { valid: true }; } catch (error) { return { valid: false, error: error.message }; } }
 function slug(value) { return String(value).toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '').slice(0, 48) || 'project'; }
 function harnessDirFor(project) { return path.join(project.path, '.harness'); }
 function runDir(project, runId) { return path.join(harnessDirFor(project), 'runs', runId); }
 function workerLeasePath(project) { return path.join(harnessDirFor(project), 'worker-lease.json'); }
-function createRun(project, input, status = 'queued') { const runId = input.runId || `run-${Date.now()}-${randomUUID().slice(0, 8)}`; const previous = readJson(path.join(runDir(project, runId), 'run.json'), {}); const run = { ...previous, runId, projectId: project.id, taskId: input.taskId, title: input.title || '', executor: input.executor || 'codex', input: { taskId: input.taskId, title: input.title, description: input.description, criteria: input.criteria, constraints: input.constraints, executor: input.executor }, priority: input.priority || 'medium', dueDate: input.dueDate || null, status, createdAt: previous.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }; fs.mkdirSync(runDir(project, runId), { recursive: true }); writeJson(path.join(runDir(project, runId), 'run.json'), run); return run; }
+function reportFingerprint(file) { try { return createHash('sha256').update(fs.readFileSync(file)).digest('hex'); } catch { return null; } }
+function createRun(project, input, status = 'queued') { const runId = input.runId || `run-${Date.now()}-${randomUUID().slice(0, 8)}`; const previous = readJson(path.join(runDir(project, runId), 'run.json'), {}); const run = { ...previous, runId, projectId: project.id, taskId: input.taskId, title: input.title || '', executor: input.executor || 'codex', model: input.model || null, modelSource: input.modelSource || { type: 'codex-default' }, input: { command: input.command, adapter: input.adapter, confirmed: input.confirmed === true, executionMode: input.executionMode, plan: input.plan, priority: input.priority, dueDate: input.dueDate, taskId: input.taskId, title: input.title, description: input.description, criteria: input.criteria, constraints: input.constraints, executor: input.executor, model: input.model || null, modelSource: input.modelSource || { type: 'codex-default' } }, priority: input.priority || 'medium', dueDate: input.dueDate || null, status, ...(status === 'working' ? { startedAt: new Date().toISOString(), reportBaseline: reportFingerprint(path.join(harnessDirFor(project), 'reports', 'latest.md')) } : {}), createdAt: previous.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }; fs.mkdirSync(runDir(project, runId), { recursive: true }); writeJson(path.join(runDir(project, runId), 'run.json'), run); return run; }
 function patchTaskCard(project, taskId, patch, expectedRunId) {
   const file = path.join(harnessDirFor(project), 'plan.json');
   const plan = normalizePlan(readJson(file, defaultBoard));
@@ -74,7 +96,7 @@ function isCurrentRun(project, runId) { return readJson(path.join(harnessDirFor(
 function listRuns(project) { const root = path.join(harnessDirFor(project), 'runs'); if (!fs.existsSync(root)) return []; return fs.readdirSync(root).map((runId) => { const run = readJson(path.join(root, runId, 'run.json'), null); if (!run) return null; const reportFile = path.join(root, runId, 'report.md'); return { ...run, report: fs.existsSync(reportFile) ? fs.readFileSync(reportFile, 'utf8') : '' }; }).filter(Boolean).sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))); }
 function projectHealth(project) { ensureProjectFiles(project); const harnessDir = harnessDirFor(project); const required = ['project.json', 'plan.json', 'status.json', 'queue.json', 'events.jsonl', 'current-task.md', 'context.md', 'reports/latest.md']; const files = required.map((relative) => { const file = path.join(harnessDir, relative); return { file: relative, exists: fs.existsSync(file), valid: relative.endsWith('.json') ? fileHealth(file).valid : fs.existsSync(file) }; }); const status = readJson(path.join(harnessDir, 'status.json'), {}); const runs = listRuns(project); return { ok: files.every((item) => item.exists && item.valid), projectId: project.id, checkedAt: new Date().toISOString(), files, activeRunId: status.runId || null, runCount: runs.length, warnings: files.filter((item) => !item.exists || !item.valid).map((item) => `${item.file} is missing or invalid`) }; }
 function createRuntimeBackup(project) { ensureProjectFiles(project); const stamp = new Date().toISOString().replace(/[:.]/g, '-'); const file = path.join(harnessDirFor(project), 'backups', `runtime-${stamp}.json`); const snapshot = { version: 1, createdAt: new Date().toISOString(), project: readJson(path.join(harnessDirFor(project), 'project.json'), project), plan: readJson(path.join(harnessDirFor(project), 'plan.json'), defaultBoard), status: readJson(path.join(harnessDirFor(project), 'status.json'), {}), queue: readJson(path.join(harnessDirFor(project), 'queue.json'), []), runs: listRuns(project) }; writeJson(file, snapshot); appendEvent(project, { type: 'runtime_backup_created', file: path.basename(file) }); return { file: path.basename(file), path: file, createdAt: snapshot.createdAt, runCount: snapshot.runs.length }; }
-function retentionPreview(project, keep = 20) { const backupDir = path.join(harnessDirFor(project), 'backups'); const runRoot = path.join(harnessDirFor(project), 'runs'); const backups = fs.existsSync(backupDir) ? fs.readdirSync(backupDir).filter((file) => file.startsWith('runtime-') && file.endsWith('.json')).sort().reverse() : []; const runs = listRuns(project); return { keep, backupsToArchive: backups.slice(keep), runsToArchive: runs.slice(keep).map((run) => run.runId) }; }
+function retentionPreview(project, keep = 20) { const backupDir = path.join(harnessDirFor(project), 'backups'); const backups = fs.existsSync(backupDir) ? fs.readdirSync(backupDir).filter((file) => file.startsWith('runtime-') && file.endsWith('.json')).sort().reverse() : []; const referenced = new Set([readJson(path.join(harnessDirFor(project), 'status.json'), {}).runId, ...readJson(path.join(harnessDirFor(project), 'queue.json'), []).map((item) => item.runId), ...normalizePlan(readJson(path.join(harnessDirFor(project), 'plan.json'), defaultBoard)).cards.map((card) => card.runId)]); const runs = listRuns(project).filter((run) => !referenced.has(run.runId) && !['working', 'paused', 'queued'].includes(run.status)); return { keep, backupsToArchive: backups.slice(keep), runsToArchive: runs.slice(keep).map((run) => run.runId) }; }
 function archiveRetention(project, keep = 20) { const preview = retentionPreview(project, keep); const archiveDir = path.join(harnessDirFor(project), 'backups', 'archive'); fs.mkdirSync(archiveDir, { recursive: true }); const backupDir = path.join(harnessDirFor(project), 'backups'); preview.backupsToArchive.forEach((file) => fs.renameSync(path.join(backupDir, file), path.join(archiveDir, file))); const runArchive = path.join(archiveDir, 'runs'); fs.mkdirSync(runArchive, { recursive: true }); preview.runsToArchive.forEach((runId) => { const source = runDir(project, runId); if (fs.existsSync(source)) fs.renameSync(source, path.join(runArchive, runId)); }); appendEvent(project, { type: 'runtime_retention_archived', keep, backups: preview.backupsToArchive.length, runs: preview.runsToArchive.length }); return { ...preview, archived: true }; }
 
 function ensureAgentProtocol(project) {
@@ -102,6 +124,7 @@ function ensureAgentProtocol(project) {
 }
 
 function ensureProjectFiles(project) {
+  if (!fs.statSync(project.path).isDirectory()) throw Object.assign(new Error('Project path is not a directory'), { code: 'ENOTDIR' });
   const harnessDir = harnessDirFor(project);
   fs.mkdirSync(path.join(harnessDir, 'requests'), { recursive: true });
   fs.mkdirSync(path.join(harnessDir, 'reports'), { recursive: true });
@@ -115,15 +138,15 @@ function ensureProjectFiles(project) {
   ensureAgentProtocol(project);
   migrateLegacyStatus(project);
 }
-function migrateLegacyStatus(project) { const statusFile = path.join(harnessDirFor(project), 'status.json'); const status = readJson(statusFile, null); if (!status?.taskId || status.runId || !['working', 'paused', 'completed', 'failed'].includes(status.status)) return; const run = createRun(project, { taskId: status.taskId, title: status.title || status.taskId, executor: status.executor || 'codex' }, status.status); writeJson(statusFile, { ...status, runId: run.runId, migratedAt: new Date().toISOString() }); appendEvent(project, { type: 'legacy_run_migrated', taskId: status.taskId, runId: run.runId }); }
+function migrateLegacyStatus(project) { const statusFile = path.join(harnessDirFor(project), 'status.json'); const status = readJson(statusFile, null); if (!status?.taskId || status.runId || !['working', 'paused', 'completed', 'failed', 'cancelled'].includes(status.status)) return; const active = readJson(path.join(harnessDirFor(project), 'active-run.json'), null) || (() => { const card = readJson(path.join(harnessDirFor(project), 'plan.json'), {}).cards?.find((item) => item?.id === status.taskId); return card?.runId ? { taskId: card.id, runId: card.runId } : null; })(); if (active?.taskId === status.taskId && /^[a-zA-Z0-9_-]+$/.test(active.runId || '')) { const existing = readJson(path.join(runDir(project, active.runId), 'run.json'), null); if (existing?.taskId === status.taskId && ['working', 'paused'].includes(existing.status)) { writeJson(statusFile, { ...status, runId: existing.runId, executor: existing.executor }); return; } } if (status.status === 'cancelled') return; const run = createRun(project, { taskId: status.taskId, title: status.title || status.taskId, executor: status.executor || 'codex' }, status.status); writeJson(statusFile, { ...status, runId: run.runId, migratedAt: new Date().toISOString() }); appendEvent(project, { type: 'legacy_run_migrated', taskId: status.taskId, runId: run.runId }); }
 function ensureProjects() {
   fs.mkdirSync(path.dirname(projectsFile), { recursive: true });
   let projects = readJson(projectsFile, null);
+  if (fs.existsSync(projectsFile) && (!Array.isArray(projects) || projects.some((project) => !project || typeof project.id !== 'string' || typeof project.path !== 'string'))) throw Object.assign(new Error('Project registry is invalid; restore data/projects.json from backup'), { code: 'EINVALIDPROJECTS' });
   if (!Array.isArray(projects)) { projects = [{ id: 'harness', name: 'Harness Lab', path: workspaceRoot, createdAt: new Date().toISOString() }]; writeJson(projectsFile, projects); }
-  projects.forEach(ensureProjectFiles);
   return projects;
 }
-function getProject(id) { return ensureProjects().find((project) => project.id === id); }
+function getProject(id, prepare = true) { const project = ensureProjects().find((project) => project.id === id); if (project && prepare) ensureProjectFiles(project); return project; }
 function gitInfo(project) {
   try {
     const branch = execFileSync('git', ['-C', project.path, 'branch', '--show-current'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -136,8 +159,8 @@ function updateRuntimeStatus(project, patch) { const file = path.join(harnessDir
 function updateRuntimeProgress(project, patch) { const file = path.join(harnessDirFor(project), 'status.json'); const status = readJson(file, { status: 'idle' }); const realProgress = !['codex_started', 'codex_diagnostic', 'codex_output'].includes(patch.event); writeJson(file, { ...status, status: status.status === 'paused' ? 'paused' : 'working', source: 'codex-exec', progressEvent: patch.event || null, progressMessage: patch.message || null, ...(realProgress ? { progressAt: new Date().toISOString() } : {}), ...(patch.threadId ? { codexThreadId: patch.threadId, codexThreadUrl: `codex://threads/${encodeURIComponent(patch.threadId)}` } : {}), updatedAt: new Date().toISOString() }); }
 function runMessages(project, runId) { const file = path.join(runDir(project, runId), 'messages.jsonl'); if (!fs.existsSync(file)) return []; return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(readJsonFromLine).filter((item) => item.message); }
 function messageRows(project, runId) { return runMessages(project, runId).map((item) => `- [${item.at || ''}] ${item.message}`).join('\n'); }
-function codexProgressReport(project, run, progress) { const updatedAt = new Date().toISOString(); const message = String(progress.message || '').trim() || `Получено событие ${progress.event || 'progress'}.`; const rows = messageRows(project, run.runId); return [`# Отчёт Codex`, '', `- Статус: В работе`, `- Текущий прогресс: ${message}`, `- Последнее событие: ${progress.event || 'progress'}`, `- Обновлено: ${updatedAt}`, `- Run: ${run.runId}`, progress.threadId ? `- Thread: ${progress.threadId}` : '', '', '## Сообщения Codex', rows || `- [${updatedAt}] ${message}`].filter(Boolean).join('\n') + '\n'; }
-function codexFinalReport(project, runId, result) { const rows = messageRows(project, runId); return [`# Отчёт Codex`, '', `- Статус: ${result.status}`, `- Код выхода: ${result.exitCode ?? 'нет'}`, `- Завершено: ${result.finishedAt || new Date().toISOString()}`, ...(result.error ? [`- Причина: ${result.error}`] : []), '', '## Сообщения Codex', rows || '- Сообщений не получено.'].join('\n') + '\n'; }
+function codexProgressReport(project, run, progress) { const updatedAt = new Date().toISOString(); const message = String(progress.message || '').trim() || `Получено событие ${progress.event || 'progress'}.`; const rows = messageRows(project, run.runId); return [`# Отчёт Codex`, '', `- Статус: В работе`, `- Текущий прогресс: ${message}`, `- Последнее событие: ${progress.event || 'progress'}`, `- Обновлено: ${updatedAt}`, `- Run: ${run.runId}`, `- Модель: ${run.model || 'по настройкам Codex'}`, progress.threadId ? `- Thread: ${progress.threadId}` : '', '', '## Сообщения Codex', rows || `- [${updatedAt}] ${message}`].filter(Boolean).join('\n') + '\n'; }
+function codexFinalReport(project, runId, result) { const rows = messageRows(project, runId); const run = readJson(path.join(runDir(project, runId), 'run.json'), {}); return [`# Отчёт ${run.executor === 'codex' ? 'Codex' : run.executor || 'исполнителя'}`, '', `- Статус: ${result.status}`, `- Код выхода: ${result.exitCode ?? 'нет'}`, `- Завершено: ${result.finishedAt || new Date().toISOString()}`, ...(result.error ? [`- Причина: ${result.error}`] : []), '', `- Модель: ${run.model || 'по настройкам Codex'}`, '', '## Сообщения исполнителя', rows || '- Сообщений не получено.'].join('\n') + '\n'; }
 function updateRunProgress(project, run, progress) { if (!isCurrentRun(project, run.runId)) return; const now = new Date().toISOString(); const runRoot = runDir(project, run.runId); if (progress.message) fs.appendFileSync(path.join(runRoot, 'messages.jsonl'), `${JSON.stringify({ at: now, event: progress.event || 'progress', message: progress.message })}\n`); const report = codexProgressReport(project, run, progress); const runFile = path.join(runRoot, 'run.json'); const current = readJson(runFile, run); const realProgress = !['codex_started', 'codex_diagnostic', 'codex_output'].includes(progress.event); writeJson(runFile, { ...current, status: 'working', progressEvent: progress.event || null, progressMessage: progress.message || null, ...(realProgress ? { progressAt: now } : {}), updatedAt: now }); writeText(path.join(runRoot, 'report.md'), report); writeText(path.join(harnessDirFor(project), 'reports', 'latest.md'), report); updateRuntimeProgress(project, progress); }
 function finishCodexRun(project, runId, result) { finishRun(project, runId, { ...result, report: codexFinalReport(project, runId, result) }); if (isCurrentRun(project, runId)) clearTaskClaim(project, readJson(path.join(harnessDirFor(project), 'status.json'), {}).taskId); }
 const codexBridge = new CodexBridge({ appendEvent, updateStatus: updateRuntimeStatus, updateProgress: updateRunProgress, finishRun: finishCodexRun, isCurrent: isCurrentRun });
@@ -146,19 +169,41 @@ function claimsPath(project) { return path.join(harnessDirFor(project), 'claims.
 function clearTaskClaim(project, taskId) { const claims = readJson(claimsPath(project), {}); if (!claims[taskId]) return; delete claims[taskId]; writeJson(claimsPath(project), claims); appendEvent(project, { type: 'task_released', taskId, source: 'executor-lifecycle' }); }
 function claimTask(project, input) { ensureProjectFiles(project); const claims = readJson(claimsPath(project), {}); const now = Date.now(); const current = claims[input.taskId]; if (current && current.claimedBy !== input.claimedBy && now - new Date(current.claimedAt).getTime() < claimTtlMs) return { error: 'Task is already claimed', claim: current }; const claim = { taskId: input.taskId, claimedBy: String(input.claimedBy || 'unknown'), claimedAt: new Date(now).toISOString(), expiresAt: new Date(now + claimTtlMs).toISOString() }; claims[input.taskId] = claim; writeJson(claimsPath(project), claims); if (!current || current.claimedBy !== claim.claimedBy || new Date(current.expiresAt).getTime() <= now) appendEvent(project, { type: 'task_claimed', ...claim }); return claim; }
 function releaseTask(project, input) { ensureProjectFiles(project); const claims = readJson(claimsPath(project), {}); const current = claims[input.taskId]; if (current && current.claimedBy !== input.claimedBy) return { error: 'Task is claimed by another agent', claim: current }; delete claims[input.taskId]; writeJson(claimsPath(project), claims); appendEvent(project, { type: 'task_released', taskId: input.taskId, claimedBy: input.claimedBy }); return { released: true, taskId: input.taskId }; }
+function readRuntimeStatus(project) {
+  const harnessDir = harnessDirFor(project);
+  migrateLegacyStatus(project);
+  const status = readJson(path.join(harnessDir, 'status.json'), { status: 'idle' });
+  if (['completed', 'failed', 'cancelled'].includes(status.status) && /^[a-zA-Z0-9_-]+$/.test(status.runId || '')) {
+    const run = readJson(path.join(runDir(project, status.runId), 'run.json'), null);
+    if (['working', 'paused'].includes(run?.status) && run.taskId === status.taskId && ['ide', 'human'].includes(run.executor)) {
+      const scopedReport = path.join(runDir(project, run.runId), 'report.md');
+      const reportFile = fs.existsSync(scopedReport) ? scopedReport : path.join(harnessDir, 'reports', 'latest.md'); const report = fs.readFileSync(reportFile, 'utf8');
+      const fresh = report.trim() && (reportFile === scopedReport || (run.reportBaseline !== undefined ? reportFingerprint(reportFile) !== run.reportBaseline : fs.statSync(reportFile).mtimeMs >= new Date(run.createdAt).getTime() - 2));
+      const outcome = status.status === 'completed' && !fresh ? 'failed' : status.status;
+      const error = outcome === 'completed' ? null : status.error || status.codexError || (status.status === 'completed' ? 'Исполнитель сообщил о завершении без актуального отчёта этого запуска.' : `Исполнитель сообщил: ${outcome}`);
+      finishRun(project, run.runId, { status: outcome, report: fresh ? report : `# Результат файлового моста\n\n${error}\n`, error, exitCode: status.exitCode ?? null, finishedAt: new Date().toISOString() });
+      clearTaskClaim(project, run.taskId); appendEvent(project, { type: 'file_bridge_result_received', runId: run.runId, taskId: run.taskId, status: outcome });
+      if (outcome !== status.status) { status.status = outcome; status.codexError = error; updateRuntimeStatus(project, { status: outcome, codexError: error }); }
+    }
+  }
+  return status;
+}
+function executionState(project) { return { status: readRuntimeStatus(project), plan: normalizePlan(readJson(path.join(harnessDirFor(project), 'plan.json'), defaultBoard)) }; }
 function projectState(project) {
   const harnessDir = harnessDirFor(project);
   ensureProjectFiles(project);
   const jsonFiles = ['plan.json', 'status.json'];
-  const status = readJson(path.join(harnessDir, 'status.json'), { status: 'idle' });
+  const status = readRuntimeStatus(project);
   const runs = listRuns(project);
   const warnings = jsonFiles.flatMap((file) => { const health = fileHealth(path.join(harnessDir, file)); return health.valid ? [] : [`${file}: ${health.error}`]; });
+  const planError = validatePlan(readJson(path.join(harnessDir, 'plan.json'), null)); if (planError) warnings.push('plan.json: ' + planError);
   if (status.status === 'working' && status.updatedAt && Date.now() - new Date(status.updatedAt).getTime() > staleTaskMs) warnings.push(`Задача ${status.taskId || ''} не обновлялась более 30 минут`);
   const activeRun = status.runId ? runs.find((run) => run.runId === status.runId) : null;
   const progressTime = activeRun?.progressAt || (status.progressEvent !== 'codex_started' ? status.progressAt : null) || activeRun?.createdAt || status.updatedAt;
   if (status.status === 'working' && status.executor === 'codex' && Date.now() - new Date(progressTime).getTime() > 60_000) warnings.push('Codex не передаёт прогресс: давно нет событий исполнителя. Проверьте отчёт и Harness bridge.');
   const queue = readJson(path.join(harnessDir, 'queue.json'), []);
   const plan = normalizePlan(readJson(path.join(harnessDir, 'plan.json'), defaultBoard));
+  const modelPlan = plan;
   plan.cards = plan.cards.map((card) => {
     const queued = queue.find((item) => item.taskId === card.id);
     if (queued) return { ...card, ...runCardPatch(queued.runId, 'queued') };
@@ -170,9 +215,17 @@ function projectState(project) {
     if (run && ['failed', 'cancelled', 'completed', 'paused'].includes(run.status)) return { ...card, ...runCardPatch(run.runId, run.status), ...(run.reviewDecision === 'accepted' ? { status: 'done', completedByUser: true } : {}) };
     return { ...card, queued: false };
   });
+  plan.cards = plan.cards.map((card) => {
+    let resolved;
+    try { resolved = resolveTaskModel(project, modelPlan, card); }
+    catch (error) { warnings.push('Модель задачи ' + card.id + ': ' + error.message); resolved = { model: null, modelSource: { type: 'invalid' } }; }
+    const run = runs.find((item) => item.runId === card.runId);
+    return { ...card, effectiveModel: resolved.model, modelSource: resolved.modelSource, ...(run ? { executionModel: run.model || null } : {}) };
+  });
   return { project, git: gitInfo(project), policy: projectPolicy(project), worker: { enabled: autoDispatchEnabled, intervalMs: autoDispatchIntervalMs }, health: { readAt: new Date().toISOString(), warnings }, plan, status, queue, runs, claims: readJson(claimsPath(project), {}), report: fs.readFileSync(path.join(harnessDir, 'reports', 'latest.md'), 'utf8'), currentTask: fs.readFileSync(path.join(harnessDir, 'current-task.md'), 'utf8'), events: fs.readFileSync(path.join(harnessDir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-100).map(readJsonFromLine) };
 }
-function readBody(req, callback) { let body = ''; req.on('data', (chunk) => { body += chunk; if (body.length > 1_000_000) req.destroy(); }); req.on('end', () => { let input; try { input = JSON.parse(body || '{}'); } catch { return callback(null); } callback(input); }); }
+function requestFailure(res, error) { console.error(redactSecrets(error.message)); if (!res.headersSent) sendJson(res, error.code ? 503 : 500, { error: error.code ? `Project files are unavailable (${error.code})` : 'Request failed; check the server log' }); else res.end(); }
+function readBody(req, callback) { let body = ''; req.on('data', (chunk) => { body += chunk; if (body.length > 1_000_000) req.destroy(); }); req.on('end', () => { let input; try { input = JSON.parse(body || '{}'); } catch { input = null; } try { callback(input); } catch (error) { requestFailure(req.res, error); } }); }
 function sendJson(res, status, value) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
 function localSuggestion(goal) { return [{ title: 'Уточнить цель и ограничения', description: `Зафиксировать ожидаемый результат для: ${goal}`, priority: 'high', status: 'ready', agent: 'Local planner', criteria: ['Цель сформулирована', 'Ограничения понятны'] }, { title: 'Собрать контекст проекта', description: 'Изучить релевантные файлы, решения и предыдущие результаты.', priority: 'medium', status: 'ready', agent: 'Local planner', criteria: ['Контекст приложен к шагу'] }, { title: 'Выполнить первый проверяемый результат', description: 'Сделать минимальное изменение и показать его пользователю.', priority: 'high', status: 'ready', agent: 'Local planner', criteria: ['Результат можно проверить'] }]; }
 function templatePlan(template) {
@@ -197,19 +250,57 @@ function hasDependencyCycle(plan) {
   return [...cards.keys()].some(visit);
 }
 function updateGlobalStatuses(plan) { const cards = plan.cards || []; cards.filter((card) => card.isGlobal || card.type === 'global').forEach((group) => { const children = cards.filter((card) => card.parentId === group.id); if (!children.length || (group.runId && !group.completedByUser)) return; group.status = children.every((card) => card.status === 'done') ? 'done' : children.some((card) => card.status === 'blocked') ? 'blocked' : children.some((card) => ['working', 'review', 'approval'].includes(card.status)) ? 'working' : children.some((card) => card.status === 'ready') ? 'ready' : 'inbox'; }); return plan; }
+function taskStartError(project, input, state = executionState(project)) {
+  const card = state.plan.cards.find((item) => item.id === input.taskId);
+  if (card && (card.dependencies || []).some((id) => state.plan.cards.find((item) => item.id === id)?.status !== 'done')) return 'Task dependencies are not completed';
+  if (card && (card.requiresApproval || card.priority === 'high' || card.executionMode === 'approval') && !card.approved) return 'Task requires approval before starting';
+  const policy = projectPolicy(project);
+  const automatic = input.executionMode === 'auto' || card?.executionMode === 'auto';
+  if (automatic && !policy.allowAutonomous) return 'Project policy does not allow autonomous execution';
+  if (['cli', 'powershell'].includes(input.executor)) {
+    const spec = localCommandSpec(input); if (spec.error) return spec.error;
+    if (!input.command && !input.adapter) return 'Command is required';
+    if (automatic && !input.adapter) return 'Autonomous command is not allowed by project policy';
+    if (input.adapter ? !policy.allowedAdapters.includes(input.adapter) : !policy.allowShell) return 'Command is not allowed by project policy';
+  }
+  return null;
+}
+function protectRuntimeCards(project, plan) {
+  const runtimeCards = projectState(project).plan.cards;
+  const protectedCards = runtimeCards.filter((card) => card.queued || (card.runId && ['working', 'approval'].includes(card.status)));
+  if (protectedCards.some((card) => !plan.cards.some((item) => item.id === card.id))) return 'Cancel the active or queued task before deleting it';
+  plan.cards = plan.cards.map((card) => { const runtime = runtimeCards.find((item) => item.id === card.id); return !runtime || (!runtime.runId && !runtime.queued) ? card : { ...card, status: runtime.status, runId: runtime.runId, queued: runtime.queued, paused: runtime.paused, cancelled: runtime.cancelled, completedByUser: runtime.completedByUser }; });
+  return null;
+}
+function compareTaskPriority(a, b) {
+  const ranks = { high: 0, medium: 1, low: 2 };
+  return (ranks[a.priority] ?? 1) - (ranks[b.priority] ?? 1) || String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31')) || String(a.queuedAt || a.updatedAt || '').localeCompare(String(b.queuedAt || b.updatedAt || ''));
+}
+function planRuntimeError(project, plan) {
+  for (const card of plan.cards) {
+    if (card.runId) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(card.runId)) return 'Invalid task run ID';
+      const run = readJson(path.join(runDir(project, card.runId), 'run.json'), null);
+      if (!run || run.taskId !== card.id) return 'A task cannot reference an unknown or foreign run';
+    } else if (!card.isGlobal && card.type !== 'global' && ['working', 'review'].includes(card.status)) return 'Start the executor or submit a result before using this status';
+  }
+  return null;
+}
 function planVersions(project) { const dir = path.join(harnessDirFor(project), 'backups'); ensureProjectFiles(project); return fs.readdirSync(dir).filter((file) => file.startsWith('plan-') && file.endsWith('.bak')).sort().reverse().map((file) => ({ file, createdAt: fs.statSync(path.join(dir, file)).mtime.toISOString() })); }
 function writeTaskRequest(project, input, queued = false) {
   const harnessDir = harnessDirFor(project);
   const executor = executorRules[input.executor] ? input.executor : 'codex';
   const run = createRun(project, { ...input, executor }, queued ? 'queued' : 'working');
-  const request = { id: `request-${Date.now()}`, type: 'start_task', taskId: input.taskId, runId: run.runId, title: input.title, executor, queued, selectedExecutor: executor, createdAt: new Date().toISOString() };
+  const request = { id: `request-${Date.now()}-${randomUUID().slice(0, 8)}`, type: 'start_task', taskId: input.taskId, runId: run.runId, title: input.title, executor, model: run.model, modelSource: run.modelSource, queued, selectedExecutor: executor, createdAt: new Date().toISOString() };
   writeJson(path.join(harnessDir, 'requests', `${request.id}.json`), request);
+  if (!queued) writeJson(path.join(harnessDir, 'active-run.json'), { runId: run.runId, taskId: run.taskId, executor: run.executor });
   appendEvent(project, request);
   return request;
 }
-function createTask(project, input) {
+function createTask(project, input, pinnedModel) {
+  if (['cli', 'powershell'].includes(input.executor) && input.dryRun === true) return { error: 'Use the command preview before starting a real attempt' };
   const harnessDir = harnessDirFor(project);
-  const state = projectState(project);
+  const state = executionState(project);
   const card = state.plan.cards.find((item) => item.id === input.taskId);
   const currentStatus = readJson(path.join(harnessDir, 'status.json'), { status: 'idle' });
   const queueFile = path.join(harnessDir, 'queue.json');
@@ -223,11 +314,8 @@ function createTask(project, input) {
     appendEvent(project, { type: 'duplicate_task_request', taskId: input.taskId, runId: queuedExisting.runId, status: 'queued' });
     return { ...queuedExisting, queued: true, duplicate: true };
   }
-  if (card) {
-    if ((card.dependencies || []).some((id) => state.plan.cards.find((item) => item.id === id)?.status !== 'done')) return { error: 'Task dependencies are not completed' };
-    if ((card.requiresApproval || card.priority === 'high' || card.executionMode === 'approval') && !card.approved) return { error: 'Task requires approval before starting' };
-    if (input.executionMode === 'auto' && !projectPolicy(project).allowAutonomous) return { error: 'Project policy does not allow autonomous execution' };
-  }
+  const startError = taskStartError(project, input, state); if (startError) return { error: startError };
+  try { input = { ...input, ...(pinnedModel || resolveTaskModel(project, state.plan, card || input)) }; } catch (error) { return { error: error.message }; }
   if (['working', 'paused'].includes(currentStatus.status)) {
     const request = writeTaskRequest(project, input, true);
     queue.push({ ...request, description: input.description || '', criteria: input.criteria || [], plan: input.plan || [], constraints: input.constraints || '', command: input.command, adapter: input.adapter, confirmed: input.confirmed === true, executionMode: input.executionMode, priority: ['high', 'medium', 'low'].includes(input.priority) ? input.priority : 'medium', dueDate: input.dueDate || null, queuedAt: new Date().toISOString() });
@@ -235,6 +323,7 @@ function createTask(project, input) {
     patchTaskCard(project, input.taskId, runCardPatch(request.runId, 'queued'));
     return request;
   }
+  if (['cli', 'powershell'].includes(input.executor)) { let result; executeLocalCommand(project, { ...input, background: true }, (_, response) => { result = response; }); return result; }
   const sourcePlan = Array.isArray(input.plan) && input.plan.length ? input.plan : (readJson(path.join(harnessDir, 'plan.json'), defaultBoard).cards || []).filter((item) => item.parentId === input.taskId);
   const planItems = sourcePlan.filter((item) => item?.title).map((item, index) => ({ id: item.planKey || item.id || `step-${index + 1}`, title: item.title, description: item.description || '', status: item.status || 'ready', dependsOn: item.dependsOn || item.dependencies || [] }));
   const plan = planItems.map((item) => `- [ ] [plan:${item.id}] ${item.title}${item.description ? ` — ${item.description}` : ''}`).join('\n');
@@ -244,7 +333,7 @@ function createTask(project, input) {
   backupFile(path.join(harnessDir, 'current-task.md'), path.join(harnessDir, 'backups'), 'current-task'); writeText(path.join(harnessDir, 'current-task.md'), task);
   const selectedExecutor = executorRules[input.executor] ? input.executor : 'codex';
   const request = writeTaskRequest(project, input, false);
-  const status = { status: 'working', taskId: input.taskId, runId: request.runId, title: input.title, executor: selectedExecutor, selectedExecutor, updatedAt: new Date().toISOString() };
+  const status = { status: 'working', taskId: input.taskId, runId: request.runId, title: input.title, executor: selectedExecutor, selectedExecutor, model: request.model, modelSource: request.modelSource, updatedAt: new Date().toISOString() };
   backupFile(path.join(harnessDir, 'status.json'), path.join(harnessDir, 'backups'), 'status'); writeJson(path.join(harnessDir, 'status.json'), status);
   patchTaskCard(project, input.taskId, { ...runCardPatch(request.runId, 'working'), completedByUser: false });
   if (selectedExecutor === 'codex' && process.env.HARNESS_CODEX_BRIDGE !== 'false') {
@@ -266,25 +355,64 @@ function dispatchNextTask(project) {
   if (['working', 'paused'].includes(currentStatus.status)) return { error: 'Current task is still working or paused' };
   const queueFile = path.join(harnessDirFor(project), 'queue.json');
   const queue = readJson(queueFile, []);
-  const priorityRank = { high: 0, medium: 1, low: 2 };
-  queue.sort((a, b) => (priorityRank[a.priority] ?? 1) - (priorityRank[b.priority] ?? 1) || String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31')) || String(a.queuedAt || '').localeCompare(String(b.queuedAt || '')));
-  const next = queue.shift();
+  queue.sort(compareTaskPriority);
+  const state = executionState(project);
+  for (const item of queue) { const error = taskStartError(project, item, state); if (error) item.blockedReason = error; else delete item.blockedReason; }
+  const index = queue.findIndex((item) => !item.blockedReason);
+  const next = index < 0 ? null : queue.splice(index, 1)[0];
   writeJson(queueFile, queue);
-  if (!next) return { empty: true, queue: [] };
+  if (!next) return { empty: queue.length === 0, waiting: queue.length > 0, queue };
   let request;
   if (['cli', 'powershell'].includes(next.executor) && (next.command || next.adapter)) {
     executeLocalCommand(project, { ...next, background: true }, (_, result) => { request = result; });
-  } else request = createTask(project, next);
+  } else request = createTask(project, next, Object.hasOwn(next, 'model') ? { model: next.model, modelSource: next.modelSource } : undefined);
   if (request.error) { queue.unshift(next); writeJson(queueFile, queue); return request; }
   appendEvent(project, { type: 'queue_dispatched', taskId: next.taskId, executor: next.executor, at: new Date().toISOString() });
   return { ...request, dispatched: true, queue };
   } finally { const currentLease = readJson(leaseFile, null); if (currentLease?.owner === lease.owner) fs.rmSync(leaseFile, { force: true }); dispatchLocks.delete(project.id); }
 }
-function dispatchQueuedProjects() { if (!autoDispatchEnabled) return []; const dispatched = []; for (const project of ensureProjects()) { const status = readJson(path.join(harnessDirFor(project), 'status.json'), { status: 'idle' }); const queue = readJson(path.join(harnessDirFor(project), 'queue.json'), []); if (!['working', 'paused'].includes(status.status) && queue.length) { const result = dispatchNextTask(project); if (result.dispatched) dispatched.push({ projectId: project.id, taskId: result.taskId }); } } return dispatched; }
+function dispatchQueuedProjects() {
+  if (!autoDispatchEnabled) return [];
+  const dispatched = [];
+  for (const project of ensureProjects()) {
+    try {
+    const status = readRuntimeStatus(project);
+    if (['working', 'paused'].includes(status.status)) continue;
+    const queue = readJson(path.join(harnessDirFor(project), 'queue.json'), []);
+    if (queue.length) { const result = dispatchNextTask(project); if (result.dispatched) { dispatched.push({ projectId: project.id, taskId: result.taskId }); continue; } }
+    if (!projectPolicy(project).allowAutonomous) continue;
+    const state = executionState(project);
+    const candidate = state.plan.cards.filter((card) => card.status === 'ready' && !card.queued && card.dryRun !== true && card.executionMode === 'auto' && ((card.executor || 'codex') === 'codex' || (['cli', 'powershell'].includes(card.executor) && card.adapter)) && !taskStartError(project, card, state)).sort(compareTaskPriority)[0];
+    if (!candidate) continue;
+    const input = { ...candidate, taskId: candidate.id, executor: candidate.executor || 'codex', confirmed: true, background: true }; delete input.runId;
+    const result = createTask(project, input);
+    if (!result.error) { appendEvent(project, { type: 'automatic_task_started', taskId: candidate.id, runId: result.runId }); dispatched.push({ projectId: project.id, taskId: candidate.id }); }
+    } catch (error) { console.error(`Project worker unavailable ${project.id}: ${error.code || error.message}`); }
+  }
+  return dispatched;
+}
 function recoverInterruptedRuns() {
   for (const project of ensureProjects()) {
+    try { ensureProjectFiles(project); } catch (error) { console.error(`Project recovery unavailable ${project.id}: ${error.code || error.message}`); continue; }
     const statusFile = path.join(harnessDirFor(project), 'status.json');
     const status = readJson(statusFile, {});
+    // Older bridges accepted a completed model turn even when every tool failed.
+    const suspectRuns = listRuns(project).filter((run) => run.executor === 'codex' && run.status === 'completed' && run.reviewDecision !== 'accepted' && runMessages(project, run.runId).some((message) => (['codex_diagnostic', 'codex_output'].includes(message.event) || message.itemType) && sandboxFailureAfter(message)));
+    if (suspectRuns.length) {
+      const events = fs.readFileSync(path.join(harnessDirFor(project), 'events.jsonl'), 'utf8').split('\n').filter(Boolean).map(readJsonFromLine);
+      for (const run of suspectRuns) {
+        const card = readJson(path.join(harnessDirFor(project), 'plan.json'), {}).cards?.find((item) => item.id === run.taskId);
+        if (card?.completedByUser) continue;
+        const evidence = events.filter((event) => event.runId === run.runId && ['codex_progress', 'codex_diagnostic'].includes(event.type));
+        const error = (evidence.length ? evidence.map((event) => ({ ...event, itemStatus: event.status })) : runMessages(project, run.runId)).reduce((previous, progress) => sandboxFailureAfter(progress, previous), null);
+        if (!error) continue;
+        backupFile(path.join(runDir(project, run.runId), 'run.json'), path.join(harnessDirFor(project), 'backups'), 'sandbox-run');
+        backupFile(path.join(runDir(project, run.runId), 'report.md'), path.join(harnessDirFor(project), 'backups'), 'sandbox-report');
+        finishCodexRun(project, run.runId, { status: 'failed', error, exitCode: run.exitCode, finishedAt: run.finishedAt || run.updatedAt, recoveredAt: new Date().toISOString() });
+        if (status.runId === run.runId) { status.status = 'failed'; status.codexError = error; updateRuntimeStatus(project, { status: 'failed', codexError: error }); }
+        appendEvent(project, { type: 'codex_false_completion_recovered', taskId: run.taskId, runId: run.runId, previousStatus: 'completed', error });
+      }
+    }
     const queueFile = path.join(harnessDirFor(project), 'queue.json');
     const queue = readJson(queueFile, []);
     const seen = new Set(['working', 'paused'].includes(status.status) ? [status.taskId] : []);
@@ -301,9 +429,9 @@ function recoverInterruptedRuns() {
         appendEvent(project, { type: 'superseded_run_recovered', taskId: run.taskId, runId: run.runId });
       }
     }
-    if (status.source === 'codex-exec' && ['working', 'paused'].includes(status.status)) {
+    if ((status.source === 'codex-exec' || ['cli', 'powershell'].includes(status.executor)) && ['working', 'paused'].includes(status.status)) {
       if (status.status === 'paused' && readJson(path.join(runDir(project, status.runId), 'run.json'), {}).suspended) continue;
-      const error = 'Harness перезапущен: связь с предыдущим процессом Codex потеряна. Проверьте отчёт и повторите запуск.';
+      const error = 'Harness перезапущен: связь с предыдущим процессом исполнителя потеряна. Проверьте отчёт и повторите запуск.';
       backupFile(statusFile, path.join(harnessDirFor(project), 'backups'), 'status');
       finishCodexRun(project, status.runId, { status: 'failed', error, exitCode: null, finishedAt: new Date().toISOString() });
       updateRuntimeStatus(project, { status: 'failed', codexError: error });
@@ -333,6 +461,15 @@ function controlTask(project, input) {
   const run = expectedRun;
   if (run && run.taskId !== input.taskId) return { error: 'Run belongs to another task' };
   if (queued && input.action !== 'cancel') return { error: 'Only cancellation is available for a queued task' };
+  if (input.action === 'submit') {
+    if (!active || currentStatus.status !== 'working' || !['ide', 'human'].includes(currentStatus.executor)) return { error: 'Only a working IDE or human task can submit a manual result' };
+    if (typeof input.result !== 'string' || !input.result.trim()) return { error: 'Describe the result and checks before submitting it' };
+    const report = `# Результат ${card?.title || run?.title || input.taskId}\n\n${input.result.trim()}\n`;
+    finishRun(project, runId, { status: 'completed', report, finishedAt: new Date().toISOString() });
+    updateRuntimeStatus(project, { status: 'completed', source: 'manual-result', exitCode: null }); clearTaskClaim(project, input.taskId);
+    appendEvent(project, { type: 'manual_result_submitted', taskId: input.taskId, runId });
+    return { taskId: input.taskId, runId, action: 'submit', status: 'completed' };
+  }
   if (input.action === 'retry') {
     const taskInput = { ...run?.input, ...card, taskId: input.taskId, title: card?.title || run?.title || currentStatus.title, executor: card?.executor || run?.executor || currentStatus.executor || 'codex' };
     delete taskInput.runId;
@@ -340,6 +477,7 @@ function controlTask(project, input) {
     if ((taskInput.dependencies || []).some((id) => projectState(project).plan.cards.find((item) => item.id === id)?.status !== 'done')) return { error: 'Task dependencies are not completed' };
     if ((taskInput.requiresApproval || taskInput.priority === 'high' || taskInput.executionMode === 'approval') && !taskInput.approved) return { error: 'Task requires approval before starting' };
     const localCommand = ['cli', 'powershell'].includes(taskInput.executor) && (taskInput.command || taskInput.adapter);
+    if (localCommand && taskInput.dryRun === true) { const spec = localCommandSpec(taskInput); if (spec.error) return spec; const preview = { taskId: input.taskId, runId, action: 'retry', dryRun: true, command: [spec.file, ...spec.args].join(' '), cwd: project.path, requiresConfirmation: true }; appendEvent(project, { type: 'command_dry_run', taskId: input.taskId, runId, source: taskInput.executor, command: preview.command }); return preview; }
     if (localCommand && input.confirmed !== true) return { error: 'Confirm the command before retrying it' };
     if (localCommand) taskInput.confirmed = true;
     if (active) {
@@ -414,9 +552,22 @@ function splitCommand(command) {
   const parts = String(command || '').trim().match(/(?:[^\s"]+|"[^"]*")+/g) || [];
   return parts.map((part) => part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part);
 }
+function localCommandSpec(input) {
+  const command = String(input.command || '').trim();
+  if (command.length > 4000) return { error: 'Command exceeds the 4000 character limit' };
+  const adapter = adapterDefinitions[input.adapter];
+  if (input.adapter && !adapter) return { error: 'Unknown command adapter' };
+  if (!['powershell', 'cli'].includes(input.executor)) return { error: 'Local command execution supports PowerShell or CLI' };
+  if (!command && !adapter) return { error: 'Command is required' };
+  if (adapter && input.executor !== adapter.executor) return { error: 'Adapter and executor do not match' };
+  const parts = adapter ? [adapter.file, ...adapter.args] : input.executor === 'powershell' ? ['powershell.exe', command] : splitCommand(command);
+  const file = parts.shift();
+  if (!adapter && !['powershell.exe', 'powershell', 'pwsh.exe', 'pwsh', 'npm', 'npm.cmd', 'node', 'node.exe', 'git', 'git.exe'].includes(String(file).toLowerCase())) return { error: 'Executable is not allowed; use PowerShell, npm, node or git' };
+  return { file, args: parts, adapter };
+}
 function safeEnvironment() {
   const allowed = new Set(['path', 'pathext', 'systemroot', 'windir', 'temp', 'tmp', 'comspec', 'psmodulepath', 'programfiles', 'programfiles(x86)', 'programw6432', 'processor_architecture', 'processor_architew6432', 'node_path']);
-  return Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase())));
+  return { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase()))), ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}) };
 }
 function stopLocalCommand(project, runId) {
   const active = activeCommands.get(project.path);
@@ -426,27 +577,20 @@ function stopLocalCommand(project, runId) {
   return true;
 }
 function executeLocalCommand(project, input, onComplete) {
+  if (input.dryRun === true) return onComplete(null, { error: 'A dry-run cannot execute a command', conflict: true });
   const policy = projectPolicy(project);
   if (input.executionMode === 'auto' && (!policy.allowAutonomous || !input.adapter)) return onComplete(null, { error: 'Autonomous command is not allowed by project policy' });
   if (input.adapter ? !policy.allowedAdapters.includes(input.adapter) : !policy.allowShell) return onComplete(null, { error: 'Command is not allowed by project policy' });
+  const startError = taskStartError(project, input); if (startError) return onComplete(null, { error: startError, conflict: true });
   const current = readJson(path.join(harnessDirFor(project), 'status.json'), {});
   if (['working', 'paused'].includes(current.status)) {
     if (current.taskId === input.taskId && activeCommands.get(project.path)?.runId === current.runId) return onComplete(null, { ...current, duplicate: true });
     return onComplete(null, { error: 'Project executor is busy; finish or cancel the active task first', conflict: true });
   }
-  const command = String(input.command || '').trim();
-  if (command.length > 4000) return onComplete(null, { error: 'Command exceeds the 4000 character limit' });
-  const adapter = adapterDefinitions[input.adapter];
-  const parts = adapter ? [adapter.file, ...adapter.args] : input.executor === 'powershell' ? ['powershell.exe', command] : splitCommand(command);
-  const file = parts.shift();
-  const args = parts;
-  const allowedFiles = new Set(['powershell.exe', 'powershell', 'pwsh.exe', 'pwsh', 'npm', 'npm.cmd', 'node', 'node.exe', 'git', 'git.exe']);
-  if (!file) return onComplete(null, { error: 'Command is required' });
-  if (!adapter && !allowedFiles.has(String(file).toLowerCase())) return onComplete(null, { error: 'Executable is not allowed; use PowerShell, npm, node or git' });
-  if (adapter && input.executor !== adapter.executor) return onComplete(null, { error: 'Adapter and executor do not match' });
-  if (!['powershell', 'cli'].includes(input.executor)) return onComplete(null, { error: 'Local command execution supports PowerShell or CLI' });
+  const spec = localCommandSpec(input); if (spec.error) return onComplete(null, spec);
+  const { file, args, adapter } = spec;
   if (input.confirmed !== true) return onComplete(null, { error: 'Explicit confirmation is required' });
-  const execArgs = ['powershell.exe', 'powershell', 'pwsh.exe', 'pwsh'].includes(String(file).toLowerCase()) ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', args.join(' ')] : args;
+  const execArgs = input.executor === 'powershell' ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', args.join(' ')] : [...args];
   let execFileName = ['powershell', 'pwsh'].includes(String(file).toLowerCase()) ? `${file}.exe` : file;
   // Windows cannot execute npm.cmd through execFile without a shell. Run npm's JS entry point directly.
   if (process.platform === 'win32' && ['npm', 'npm.cmd'].includes(String(file).toLowerCase())) {
@@ -495,21 +639,37 @@ function executeLocalCommand(project, input, onComplete) {
   if (input.background) onComplete(null, { ...running, background: true });
 }
 
-const server = http.createServer((req, res) => {
+function handleRequest(req, res) {
+  let host;
+  try { host = new URL('http://' + req.headers.host); } catch { return sendJson(res, 400, { error: 'Invalid Host header' }); }
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(host.hostname)) return sendJson(res, 403, { error: 'Only local requests are allowed' });
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers.origin) {
+    let origin; try { origin = new URL(req.headers.origin); } catch { return sendJson(res, 403, { error: 'Foreign request origin' }); }
+    if (origin.origin !== host.origin) return sendJson(res, 403, { error: 'Foreign request origin' });
+  }
   let pathname;
   try { pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { res.writeHead(400); return res.end('Bad request'); }
+  if (pathname === '/api/models' && req.method === 'GET') return sendJson(res, 200, readModelCatalog());
   if (pathname === '/api/projects' && req.method === 'GET') return sendJson(res, 200, ensureProjects());
   if (pathname === '/api/projects' && req.method === 'POST') return readBody(req, (input) => {
+    if (!input || typeof input.path !== 'string' || !input.path.trim()) return sendJson(res, 400, { error: 'Путь проекта обязателен' });
     const projectPath = path.resolve(String(input?.path || ''));
     const name = String(input?.name || path.basename(projectPath) || 'Новый проект').trim();
     if (!projectPath || !fs.existsSync(projectPath) || !fs.statSync(projectPath).isDirectory()) return sendJson(res, 400, { error: 'Папка проекта не найдена' });
     const projects = ensureProjects();
-    if (projects.some((project) => path.resolve(project.path) === projectPath)) return sendJson(res, 409, { error: 'Проект уже добавлен' });
+    const pathKey = (directory) => { let resolved; try { resolved = fs.realpathSync(directory); } catch { resolved = path.resolve(directory); } return process.platform === 'win32' ? resolved.toLowerCase() : resolved; };
+    if (projects.some((project) => pathKey(project.path) === pathKey(projectPath))) return sendJson(res, 409, { error: 'Проект уже добавлен' });
     let id = slug(name); let suffix = 2;
     while (projects.some((project) => project.id === id)) id = `${slug(name)}-${suffix++}`;
-    const policy = policyProfiles[input?.policy] ? input.policy : 'development';
-    const project = { id, name, path: projectPath, template: String(input?.template || 'web'), policy, createdAt: new Date().toISOString() };
-    projects.push(project); writeJson(projectsFile, projects); ensureProjectFiles(project); writeJson(path.join(harnessDirFor(project), 'plan.json'), templatePlan(project.template)); return sendJson(res, 201, project);
+    const previousSettings = readJson(path.join(projectPath, '.harness', 'project.json'), {});
+    const policy = policyProfiles[input?.policy] ? input.policy : policyProfiles[previousSettings.policy] ? previousSettings.policy : 'development';
+    let model; try { model = normalizeModel(Object.hasOwn(input, 'model') ? input.model : previousSettings.model); } catch (error) { return sendJson(res, 400, { error: error.message }); }
+    const allowedAdapters = Array.isArray(input.allowedAdapters) ? input.allowedAdapters : previousSettings.allowedAdapters;
+    const project = { id, name, path: projectPath, template: String(input?.template || previousSettings.template || 'web'), policy, model, ...(Array.isArray(allowedAdapters) ? { allowedAdapters: allowedAdapters.filter((adapter) => policyProfiles[policy].allowedAdapters.includes(adapter)) } : {}), createdAt: previousSettings.createdAt || new Date().toISOString() };
+    const existingPlan = fs.existsSync(path.join(harnessDirFor(project), 'plan.json'));
+    projects.push(project); writeJson(projectsFile, projects); ensureProjectFiles(project);
+    if (!existingPlan) writeJson(path.join(harnessDirFor(project), 'plan.json'), templatePlan(project.template));
+    writeJson(path.join(harnessDirFor(project), 'project.json'), project); return sendJson(res, 201, project);
   });
   const versionsMatch = pathname.match(/^\/api\/projects\/([^/]+)\/plan\/(versions|rollback)$/);
   if (versionsMatch) {
@@ -520,17 +680,32 @@ const server = http.createServer((req, res) => {
       const filename = path.basename(String(input?.file || ''));
       if (!filename || !filename.startsWith('plan-') || !filename.endsWith('.bak')) return sendJson(res, 400, { error: 'Invalid plan version' });
       const backup = path.join(harnessDirFor(project), 'backups', filename); if (!fs.existsSync(backup)) return sendJson(res, 404, { error: 'Plan version not found' });
-      const plan = readJson(backup, null); if (!plan || !Array.isArray(plan.cards) || !Array.isArray(plan.columns) || hasDependencyCycle(plan)) return sendJson(res, 400, { error: 'Invalid plan version' });
+      const plan = readJson(backup, null); if (validatePlan(plan) || hasDependencyCycle(plan)) return sendJson(res, 400, { error: 'Invalid plan version' });
+      const runtimeError = protectRuntimeCards(project, plan); if (runtimeError) return sendJson(res, 409, { error: runtimeError });
       const planFile = path.join(harnessDirFor(project), 'plan.json'); const current = readJson(planFile, defaultBoard); const restored = { ...plan, revision: Number(current.revision || 0) + 1, updatedAt: new Date().toISOString() }; backupFile(planFile, path.join(harnessDirFor(project), 'backups'), 'plan'); writeJson(planFile, restored); appendEvent(project, { type: 'plan_rollback', file: filename }); return sendJson(res, 200, restored);
     });
   }
   const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)(?:\/(state|health|backup|retention|plan|task|suggest|command|claim|release|runs|queue(?:\/next)?))?$/);
   if (projectMatch) {
-    const project = getProject(decodeURIComponent(projectMatch[1]));
+    const project = getProject(decodeURIComponent(projectMatch[1]), !(req.method === 'DELETE' && !projectMatch[2]));
     if (!project) { res.writeHead(404); return res.end('Project not found'); }
     if (!projectMatch[2] && req.method === 'GET') return sendJson(res, 200, project);
-    if (!projectMatch[2] && req.method === 'PUT') return readBody(req, (input) => { const nextPolicy = policyProfiles[input?.policy] ? input.policy : project.policy || 'development'; const base = policyProfiles[nextPolicy]; const allowedAdapters = Array.isArray(input?.allowedAdapters) ? input.allowedAdapters.filter((adapter) => base.allowedAdapters.includes(adapter)) : project.allowedAdapters; Object.assign(project, { policy: nextPolicy, ...(allowedAdapters ? { allowedAdapters } : {}) }); const projects = readJson(projectsFile, []); const persisted = projects.find((item) => item.id === project.id); if (persisted) Object.assign(persisted, project); writeJson(projectsFile, projects); writeJson(path.join(harnessDirFor(project), 'project.json'), project); appendEvent(project, { type: 'project_policy_updated', policy: nextPolicy, allowedAdapters: projectPolicy(project).allowedAdapters }); return sendJson(res, 200, project); });
-    if (!projectMatch[2] && req.method === 'DELETE') { writeJson(projectsFile, ensureProjects().filter((item) => item.id !== project.id)); res.writeHead(204); return res.end(); }
+    if (!projectMatch[2] && req.method === 'PUT') return readBody(req, (input) => {
+      if (!input || typeof input !== 'object') return sendJson(res, 400, { error: 'Invalid project settings' });
+      let model = project.model || null;
+      try { if (Object.hasOwn(input, 'model')) model = normalizeModel(input.model); } catch (error) { return sendJson(res, 400, { error: error.message }); }
+      const nextPolicy = policyProfiles[input.policy] ? input.policy : project.policy || 'development';
+      const base = policyProfiles[nextPolicy];
+      const allowedAdapters = Array.isArray(input.allowedAdapters) ? input.allowedAdapters.filter((adapter) => base.allowedAdapters.includes(adapter)) : project.allowedAdapters;
+      Object.assign(project, { policy: nextPolicy, model, ...(allowedAdapters ? { allowedAdapters } : {}) });
+      const projects = readJson(projectsFile, []);
+      const persisted = projects.find((item) => item.id === project.id);
+      if (persisted) Object.assign(persisted, project);
+      writeJson(projectsFile, projects); writeJson(path.join(harnessDirFor(project), 'project.json'), project);
+      appendEvent(project, { type: 'project_settings_updated', policy: nextPolicy, model, allowedAdapters: projectPolicy(project).allowedAdapters });
+      return sendJson(res, 200, project);
+    });
+    if (!projectMatch[2] && req.method === 'DELETE') { const status = readJson(path.join(harnessDirFor(project), 'status.json'), {}), queue = readJson(path.join(harnessDirFor(project), 'queue.json'), []); if (project.id === 'harness' || ['working', 'paused'].includes(status.status) || queue.length || activeCommands.has(project.path) || codexBridge.active.has(project.path)) return sendJson(res, 409, { error: 'Cancel active and queued tasks before disconnecting the project' }); writeJson(projectsFile, ensureProjects().filter((item) => item.id !== project.id)); res.writeHead(204); return res.end(); }
     if (projectMatch[2] === 'state' && req.method === 'GET') return sendJson(res, 200, projectState(project));
     if (projectMatch[2] === 'health' && req.method === 'GET') return sendJson(res, 200, projectHealth(project));
     if (projectMatch[2] === 'backup' && req.method === 'POST') return sendJson(res, 201, createRuntimeBackup(project));
@@ -542,28 +717,25 @@ const server = http.createServer((req, res) => {
     if (projectMatch[2] === 'runs' && req.method === 'GET') return sendJson(res, 200, listRuns(project));
     if (projectMatch[2] === 'queue/next' && req.method === 'POST') { const result = dispatchNextTask(project); return sendJson(res, result.error ? 409 : 200, result); }
     if (projectMatch[2] === 'plan' && req.method === 'PUT') return readBody(req, (inputPlan) => {
+      const validationError = validatePlan(inputPlan); if (validationError) return sendJson(res, 400, { error: validationError });
       const plan = normalizePlan(inputPlan);
       if (!plan || !Array.isArray(plan.cards) || !Array.isArray(plan.columns)) return sendJson(res, 400, { error: 'Invalid plan' });
+      try { plan.cards.forEach((card) => { if (Object.hasOwn(card, 'model')) card.model = normalizeModel(card.model); delete card.effectiveModel; delete card.modelSource; delete card.executionModel; }); } catch (error) { return sendJson(res, 400, { error: error.message }); }
       if (hasDependencyCycle(plan)) return sendJson(res, 400, { error: 'Dependency cycle detected' });
       const planFile = path.join(harnessDirFor(project), 'plan.json');
       const currentPlan = readJson(planFile, defaultBoard);
       const currentRevision = Number(currentPlan.revision || 0);
       if (plan.revision !== undefined && Number(plan.revision || 0) !== currentRevision) return sendJson(res, 409, { error: 'Plan has changed since it was loaded', revision: currentRevision });
-      const runtimeCards = projectState(project).plan.cards;
-      const protectedCards = runtimeCards.filter((card) => card.queued || (card.runId && ['working', 'approval'].includes(card.status)));
-      if (protectedCards.some((card) => !plan.cards.some((item) => item.id === card.id))) return sendJson(res, 409, { error: 'Cancel the active or queued task before deleting it' });
-      plan.cards = plan.cards.map((card) => {
-        const runtime = runtimeCards.find((item) => item.id === card.id);
-        if (!runtime || (!runtime.runId && !runtime.queued)) return card;
-        return { ...card, status: runtime.status, runId: runtime.runId, queued: runtime.queued, paused: runtime.paused, cancelled: runtime.cancelled, completedByUser: runtime.completedByUser };
-      });
+      const runtimeError = protectRuntimeCards(project, plan); if (runtimeError) return sendJson(res, 409, { error: runtimeError });
+      const runError = planRuntimeError(project, plan); if (runError) return sendJson(res, 400, { error: runError });
       updateGlobalStatuses(plan);
       const nextPlan = { ...plan, revision: currentRevision + 1, updatedAt: new Date().toISOString() };
       backupFile(planFile, path.join(harnessDirFor(project), 'backups'), 'plan'); writeJson(planFile, nextPlan);
       appendEvent(project, { type: 'plan_saved', revision: nextPlan.revision });
-      return sendJson(res, 200, nextPlan);
+      return sendJson(res, 200, projectState(project).plan);
     });
     if (projectMatch[2] === 'task' && req.method === 'POST') return readBody(req, (input) => {
+      const validationError = validateTaskInput(input); if (validationError) return sendJson(res, 400, { error: validationError });
       if (!input?.taskId || typeof input.taskId !== 'string' || (input.runId && !/^[a-zA-Z0-9_-]+$/.test(input.runId))) return sendJson(res, 400, { error: 'Invalid task or run ID' });
       if (input.action) {
         const request = controlTask(project, input);
@@ -575,6 +747,8 @@ const server = http.createServer((req, res) => {
       return sendJson(res, result.error ? 409 : 201, result);
     });
     if (projectMatch[2] === 'command' && req.method === 'POST') return readBody(req, (input) => {
+      const validationError = validateTaskInput(input); if (validationError || input.runId) return sendJson(res, 400, { error: validationError || 'A new command requires a new run ID' });
+      input.executor ||= 'powershell'; const commandSpec = localCommandSpec(input); if (commandSpec.error) return sendJson(res, 400, commandSpec);
       if (!input?.taskId || (!String(input.command || '').trim() && !adapterDefinitions[input.adapter])) return sendJson(res, 400, { error: 'Task and command are required' });
       const adapter = adapterDefinitions[input.adapter];
       const executionMode = input.executionMode || input.autonomyMode || 'manual';
@@ -587,9 +761,11 @@ const server = http.createServer((req, res) => {
       const preview = { taskId: input.taskId, executor: input.executor || 'powershell', adapter: input.adapter || null, command: previewParts.join(' '), cwd: project.path, dryRun: input.dryRun === true, requiresConfirmation: true, allowedEnvironment: ['Path', 'PATHEXT', 'SystemRoot', 'TEMP', 'TMP', 'ComSpec', 'NODE_PATH'] };
       if (input.dryRun === true) { appendEvent(project, { type: 'command_dry_run', source: input.adapter || input.executor || 'powershell', taskId: input.taskId, command: preview.command }); return sendJson(res, 200, preview); }
       if (input.confirmed !== true) return sendJson(res, 409, { error: 'Explicit confirmation is required', preview });
+      const startError = taskStartError(project, input); if (startError) return sendJson(res, 409, { error: startError });
+      if (input.background === true && ['working', 'paused'].includes(readJson(path.join(harnessDirFor(project), 'status.json'), {}).status)) { const result = createTask(project, input); return sendJson(res, result.error ? 409 : 200, result); }
       return executeLocalCommand(project, input, (error, result) => error ? sendJson(res, 500, error) : result.error ? sendJson(res, result.conflict ? 409 : 400, result) : sendJson(res, 200, result));
     });
-    if (projectMatch[2] === 'suggest' && req.method === 'POST') return readBody(req, (input) => { if (!input?.goal) { res.writeHead(400); return res.end('Goal is required'); } const result = { provider: 'local-planner', steps: localSuggestion(String(input.goal)) }; appendEvent(project, { type: 'plan_suggested', provider: result.provider, count: result.steps.length }); return sendJson(res, 200, result); });
+    if (projectMatch[2] === 'suggest' && req.method === 'POST') return readBody(req, (input) => { if (!input?.goal) { res.writeHead(400); return res.end('Goal is required'); } const result = { provider: 'local-planner', steps: localSuggestion(String(input.goal)).map((step) => ({ ...step, constraints: String(input.constraints || ''), description: step.description + '\n\nЦель: ' + String(input.goal) })) }; appendEvent(project, { type: 'plan_suggested', provider: result.provider, count: result.steps.length }); return sendJson(res, 200, result); });
   }
   if (pathname === '/api/board') {
     if (req.method === 'GET') return sendJson(res, 200, readBoard());
@@ -601,14 +777,31 @@ const server = http.createServer((req, res) => {
   const file = path.resolve(root, publicPath);
   if (!file.startsWith(root + path.sep)) { res.writeHead(403); return res.end('Forbidden'); }
   fs.readFile(file, (error, data) => { if (error) { res.writeHead(404); return res.end('Not found'); } res.writeHead(200, { 'Content-Type': `${types[path.extname(file)] || 'application/octet-stream'}; charset=utf-8` }); res.end(data); });
-});
+}
+const server = http.createServer((req, res) => { req.res = res; try { handleRequest(req, res); } catch (error) { requestFailure(res, error); } });
 
 let port = Number(process.env.HARNESS_PORT || 4173);
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE' && port < 4193) { console.log(`Port ${port} is in use, trying ${port + 1}...`); port += 1; server.listen(port, '127.0.0.1'); return; }
   console.error(`Cannot start Harness Lab: ${error.message}`); process.exitCode = 1;
 });
-server.on('listening', () => { recoverInterruptedRuns(); console.log(`Harness Lab: http://localhost:${port}`); });
+server.on('listening', () => { try { recoverInterruptedRuns(); } catch (error) { console.error(`Runtime recovery unavailable: ${error.message}`); } console.log(`Harness Lab: http://localhost:${port}`); });
 server.listen(port, '127.0.0.1');
 const queueWorker = setInterval(() => { try { const dispatched = dispatchQueuedProjects(); dispatched.forEach((item) => console.log(`Harness queue worker: ${item.projectId}/${item.taskId}`)); } catch (error) { console.error(`Harness queue worker: ${error.message}`); } }, autoDispatchIntervalMs);
 queueWorker.unref();
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true; clearInterval(queueWorker);
+  for (const project of readJson(projectsFile, [])) {
+    try {
+      const command = activeCommands.get(project.path); if (command) stopLocalCommand(project, command.runId);
+      const codex = codexBridge.active.get(project.path); if (codex) codexBridge.stop(project, codex.runId);
+    } catch (error) { console.error(`Cannot stop executor for ${project.id}: ${error.message}`); }
+  }
+  server.close(() => process.exit(0)); server.closeIdleConnections();
+  setTimeout(() => process.exit(0), 2000).unref();
+}
+process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
+process.on('message', (message) => { if (message?.type === 'harness:shutdown') shutdown(); });
+process.on('disconnect', shutdown);

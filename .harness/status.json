@@ -1,11 +1,10 @@
 {
+  "taskId": "board-drop-zone-20261026",
+  "runId": "run-board-drop-zone-20261026",
+  "title": "Исправление переноса карточки между колонками",
   "status": "completed",
-  "taskId": "retry-start-20261025",
-  "title": "Повторить должно запускать новую попытку",
   "executor": "codex",
   "source": "codex",
-  "updatedAt": "2026-10-25T16:00:56.318Z",
-  "exitCode": 0,
-  "runId": "run-retry-start-20261025",
-  "migratedAt": "2026-10-25T10:33:59.155Z"
+  "updatedAt": "2026-10-26T00:00:00.000Z",
+  "exitCode": 0
 }

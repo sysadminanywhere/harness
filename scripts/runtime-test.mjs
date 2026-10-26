@@ -12,12 +12,26 @@ const seedPlan = { columns: [{ id: 'ready', title: 'To do' }, { id: 'working', t
   { id: 'lost', title: 'Lost executor', status: 'ready', queued: true, runId: 'duplicate' },
   { id: 'first', title: 'First', status: 'ready' }, { id: 'broken-cli', title: 'Broken CLI', status: 'ready', queued: true },
   { id: 'next', title: 'Next', status: 'ready', queued: true },
+  { id: 'sandbox-failed', title: 'False completion', status: 'review', runId: 'sandbox-failed' },
+  { id: 'sandbox-recovered', title: 'Recovered tools', status: 'review', runId: 'sandbox-recovered' },
+  { id: 'sandbox-accepted', title: 'Accepted by user', status: 'done', runId: 'sandbox-accepted', completedByUser: true },
 ] };
 write(path.join(workspace, 'data', 'board.json'), seedPlan);
 write(path.join(harness, 'plan.json'), seedPlan);
 write(path.join(harness, 'status.json'), { status: 'working', source: 'codex-exec', executor: 'codex', runId: 'lost-run', taskId: 'lost', updatedAt: new Date().toISOString() });
 write(path.join(harness, 'queue.json'), [{ taskId: 'lost', runId: 'duplicate', title: 'Lost executor' }]);
 for (const id of ['lost-run', 'duplicate']) write(path.join(harness, 'runs', id, 'run.json'), { runId: id, taskId: 'lost', status: id === 'duplicate' ? 'queued' : 'working', createdAt: new Date().toISOString() });
+const sandboxEvents = [];
+for (const id of ['sandbox-failed', 'sandbox-recovered', 'sandbox-accepted']) {
+  write(path.join(harness, 'runs', id, 'run.json'), { runId: id, taskId: id, executor: 'codex', status: 'completed', exitCode: 0, createdAt: new Date().toISOString() });
+  fs.writeFileSync(path.join(harness, 'runs', id, 'messages.jsonl'), JSON.stringify({ event: 'codex_diagnostic', message: 'helper_unknown_error: setup refresh had errors' }) + '\n');
+  fs.writeFileSync(path.join(harness, 'runs', id, 'report.md'), 'Original completed report');
+  sandboxEvents.push({ type: 'codex_diagnostic', runId: id, message: 'helper_unknown_error: setup refresh had errors' });
+}
+sandboxEvents.push({ type: 'codex_progress', runId: 'sandbox-recovered', itemType: 'command_execution', status: 'completed', exitCode: 0, message: 'Tool execution recovered' });
+write(path.join(harness, 'runs', 'sandbox-mentioned', 'run.json'), { runId: 'sandbox-mentioned', taskId: 'sandbox-mentioned', executor: 'codex', status: 'completed' });
+fs.writeFileSync(path.join(harness, 'runs', 'sandbox-mentioned', 'messages.jsonl'), JSON.stringify({ role: 'user', message: 'Investigate helper_unknown_error: setup refresh had errors' }) + '\n');
+fs.writeFileSync(path.join(harness, 'events.jsonl'), sandboxEvents.map((event) => JSON.stringify(event)).join('\n') + '\n');
 const probe = net.createServer(); await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve));
 const port = probe.address().port; await new Promise((resolve) => probe.close(resolve));
 const server = spawn(process.execPath, ['server.js'], { env: { ...process.env, HARNESS_WORKSPACE: workspace, HARNESS_PORT: String(port), HARNESS_AUTO_DISPATCH: 'true', HARNESS_AUTO_DISPATCH_INTERVAL_MS: '50', HARNESS_CODEX_BRIDGE: 'true', CODEX_CLI_PATH: process.execPath }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
@@ -40,6 +54,13 @@ try {
   assert.equal(state.plan.cards.find((c) => c.id === 'lost').queued, false);
   assert.equal(state.plan.cards.find((c) => c.id === 'lost').status, 'blocked');
   assert.match(state.report, /failed/);
+  assert.equal(state.runs.find((run) => run.runId === 'sandbox-failed').status, 'failed');
+  assert.equal(state.plan.cards.find((card) => card.id === 'sandbox-failed').status, 'blocked');
+  assert.match(state.runs.find((run) => run.runId === 'sandbox-failed').report, /Windows sandbox/);
+  assert.equal(state.runs.find((run) => run.runId === 'sandbox-recovered').status, 'completed');
+  assert.equal(state.runs.find((run) => run.runId === 'sandbox-accepted').status, 'completed');
+  assert.equal(state.runs.find((run) => run.runId === 'sandbox-mentioned').status, 'completed', 'Quoted error in task context must not become a runtime failure');
+  assert.ok(fs.readdirSync(path.join(harness, 'backups')).some((name) => name.includes('sandbox-report')));
   await request('/task', { taskId: 'lost', action: 'reset', runId: 'lost-run' });
   const first = await request('/task', { taskId: 'first', title: 'First', executor: 'ide' });
   const duplicate = await request('/task', { taskId: 'first', title: 'Duplicate', executor: 'ide' });

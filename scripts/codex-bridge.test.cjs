@@ -130,6 +130,25 @@ test('a successful command after transient sandbox failure permits recovery', ()
   f.emit({ type: 'turn.completed' }); f.child.emit('close', 0);
   assert.equal(f.result.finished[0].status, 'completed'); assert.ok(f.result.progress.some((p) => p.message === 'TOOLS_OK'));
 });
+
+test('sandbox failures returned through MCP and final messages cannot become completed', () => {
+  for (const item of [
+    { type: 'mcp_tool_call', result: { content: [{ text: 'windows sandbox failed: helper_unknown_error: setup refresh had errors' }] } },
+    { type: 'agent_message', text: 'Не удалось выполнить HCM-35: PowerShell недоступен — helper_unknown_error: setup refresh had errors.' },
+  ]) {
+    const f = fixture(); f.start(); f.emit({ type: 'item.completed', item });
+    f.emit({ type: 'turn.completed' }); f.child.emit('close', 0);
+    assert.equal(f.result.finished[0].status, 'failed'); assert.match(f.result.finished[0].error, /sandbox/);
+  }
+});
+
+test('mentioning an old sandbox issue after successful tools does not negate recovery', () => {
+  const f = fixture(); f.start(); f.child.stderr.emit('data', 'setup refresh had errors');
+  f.emit({ type: 'item.completed', item: { type: 'command_execution', status: 'completed', exit_code: 0, aggregated_output: 'OK' } });
+  f.emit({ type: 'item.completed', item: { type: 'agent_message', text: 'Fixed the previous setup refresh had errors issue.' } });
+  f.emit({ type: 'turn.completed' }); f.child.emit('close', 0);
+  assert.equal(f.result.finished[0].status, 'completed');
+});
 test('each Codex run gets an owned temporary directory without changing global environment', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-env-'));
   try {
@@ -139,4 +158,16 @@ test('each Codex run gets an owned temporary directory without changing global e
     assert.equal(prepared.TEMP, prepared.TMP); assert.ok(fs.statSync(prepared.TEMP).isDirectory());
     assert.equal(env.TEMP, 'shared-root'); assert.equal(prepared.Path, 'preserved');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+test('explicit model is passed as one CLI argument on start and resume; default omits the flag', () => {
+  const calls = [];
+  const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.pid = 322;
+  const f = fixture({ spawnProcess: (_, args) => { calls.push(args); return child; } });
+  f.bridge.start(f.project, { taskId: 'task', title: 'Model task', model: 'test-model' }, { runId: 'run-1' });
+  assert.equal(calls[0][calls[0].indexOf('--model') + 1], 'test-model');
+  f.bridge.stop(f.project, 'run-1');
+  f.bridge.start(f.project, { taskId: 'task', title: 'Resume', model: 'pinned-model', resumeThreadId: 'thread' }, { runId: 'run-1' });
+  assert.equal(calls[1][calls[1].indexOf('--model') + 1], 'pinned-model'); assert.ok(calls[1].includes('resume'));
+  f.bridge.stop(f.project, 'run-1');
+  f.start(); assert.equal(calls[2].includes('--model'), false); f.bridge.stop(f.project, 'run-1');
 });

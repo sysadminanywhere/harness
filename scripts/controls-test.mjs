@@ -108,6 +108,51 @@ try {
   const success = await request('/command', { ...command, command: 'node -e "console.log(12345)"' });
   await until(async () => { const s = await state(); return s.status.runId === success.runId && s.status.status === 'completed'; });
   s = await state(); assert.equal(card(s, 'c').status, 'review'); assert.match(s.report, /12345/);
+  const modelProjectPath = path.join(workspace, 'model-project'); fs.mkdirSync(modelProjectPath);
+  const modelResponse = await fetch(base + '/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Model settings fixture', path: modelProjectPath, model: 'project-one' }) });
+  assert.equal(modelResponse.status, 201); const mp = await modelResponse.json();
+  async function modelRequest(route, body, expected = 200, method = 'POST') {
+    const r = await fetch(base + '/api/projects/' + mp.id + route, body === undefined ? undefined : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const value = await r.json(); assert.equal(r.status, expected, JSON.stringify(value)); return value;
+  }
+  const modelPlan = { columns, cards: [
+    { id: 'scope', title: 'Model scope', isGlobal: true, model: 'scope-one', status: 'inbox', priority: 'medium' },
+    { id: 'task-model', title: 'Task model', parentId: 'scope', model: 'task-one', status: 'ready', executor: 'codex', priority: 'medium' },
+    { id: 'task-inherit', title: 'Inherited model', parentId: 'scope', model: null, status: 'ready', executor: 'codex', priority: 'medium' },
+    { id: 'task-project', title: 'Project model', status: 'ready', executor: 'codex', priority: 'medium' },
+  ] };
+  await modelRequest('/plan', modelPlan, 200, 'PUT');
+  let ms = await modelRequest('/state'); assert.equal(ms.project.model, 'project-one');
+  assert.equal(card(ms, 'task-inherit').effectiveModel, 'scope-one'); assert.equal(card(ms, 'task-project').effectiveModel, 'project-one');
+  const mr = await modelRequest('/task', { taskId: 'task-model', title: 'Task model', executor: 'codex', model: 'stale-client-value' }, 201);
+  ms = await modelRequest('/state'); assert.equal(ms.status.model, 'task-one'); assert.equal(ms.runs.find((r) => r.runId === mr.runId).input.model, 'task-one');
+  const mq = await modelRequest('/task', { taskId: 'task-inherit', title: 'Inherited model', executor: 'codex' }, 201);
+  assert.equal(mq.model, 'scope-one'); assert.equal(mq.queued, true);
+  const editedModels = (await modelRequest('/state')).plan;
+  editedModels.cards.find((c) => c.id === 'scope').model = 'scope-two'; editedModels.cards.find((c) => c.id === 'task-model').model = 'task-two';
+  await modelRequest('/plan', editedModels, 200, 'PUT'); await modelRequest('', { model: 'project-two' }, 200, 'PUT');
+  ms = await modelRequest('/state'); assert.equal(ms.project.model, 'project-two'); assert.equal(card(ms, 'task-model').effectiveModel, 'task-two'); assert.equal(card(ms, 'task-model').executionModel, 'task-one');
+  await modelRequest('/task', { taskId: 'task-model', action: 'pause', runId: mr.runId });
+  await modelRequest('/task', { taskId: 'task-model', action: 'resume', runId: mr.runId });
+  assert.equal((await modelRequest('/state')).status.model, 'task-one');
+  await modelRequest('/task', { taskId: 'task-model', action: 'cancel', runId: mr.runId });
+  assert.match((await modelRequest('/state')).report, /task-one/);
+  const md = await modelRequest('/queue/next', {}); assert.equal(md.runId, mq.runId); assert.equal(md.model, 'scope-one');
+  await modelRequest('/task', { taskId: 'task-inherit', action: 'cancel', runId: mq.runId });
+  const retryModel = await modelRequest('/task', { taskId: 'task-model', action: 'retry', runId: mr.runId }); assert.equal(retryModel.model, 'task-two');
+  await modelRequest('/task', { taskId: 'task-model', action: 'cancel', runId: retryModel.runId });
+  await modelRequest('', { model: null }, 200, 'PUT');
+  const defaultModel = await modelRequest('/task', { taskId: 'task-project', title: 'Default', executor: 'codex' }, 201); assert.equal(defaultModel.model, null);
+  await modelRequest('', { model: '--invalid flag' }, 400, 'PUT'); assert.equal((await modelRequest('/state')).project.model, null);
+  const invalidModelPlan = (await modelRequest('/state')).plan; invalidModelPlan.cards[0].model = 'bad model';
+  await modelRequest('/plan', invalidModelPlan, 400, 'PUT');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(modelProjectPath, '.harness', 'project.json'))).model, null);
+  const mpFile = path.join(modelProjectPath, '.harness', 'plan.json');
+  const externalPlan = JSON.parse(fs.readFileSync(mpFile)); externalPlan.cards[0].model = 'invalid external model'; write(mpFile, externalPlan);
+  assert.ok((await modelRequest('/state')).health.warnings.some((warning) => warning.includes('Invalid model')));
+  externalPlan.cards[0].model = 'scope-two'; write(mpFile, externalPlan);
+  const catalog = await (await fetch(base + '/api/models')).json(); assert.ok(Array.isArray(catalog.models)); assert.equal(Object.hasOwn(catalog, 'identity'), false);
+  console.log('HARNESS_MODELS_OK task/scope/project inheritance, queued snapshot, resume snapshot, retry current selection, validation, persisted settings');
   console.log('HARNESS_CONTROLS_OK legacy ready/cancel, queued cancel, retry, real command cancellation, pause/resume, stale run, historic review, plan conflict, persisted state');
   if (process.argv.includes('--preview')) {
     const previewPath = path.join(workspace, 'browser-project'); fs.mkdirSync(previewPath);
@@ -119,6 +164,8 @@ try {
       { id: 'ui-command', title: 'Command control probe', status: 'ready', priority: 'medium', executor: 'cli', command: command.command, criteria: ['Process stopped'] },
       { id: 'ui-review', title: 'Review control probe', status: 'review', runId: 'review-fixture', priority: 'medium', executor: 'ide', criteria: ['Verified result'] },
       { id: 'ui-return', title: 'Return control probe', status: 'review', runId: 'return-fixture', priority: 'medium', executor: 'ide', criteria: ['Review result'] },
+      { id: 'ui-model-scope', title: 'Model scope probe', status: 'inbox', isGlobal: true, priority: 'medium', executor: 'codex', model: null, criteria: ['Scope model saved'] },
+      { id: 'ui-model-child', title: 'Model child probe', parentId: 'ui-model-scope', status: 'ready', priority: 'medium', executor: 'codex', model: null, criteria: ['Model selection works'] },
     ] };
     for (const [id, taskId] of [['review-fixture', 'ui-review'], ['return-fixture', 'ui-return']]) {
       write(path.join(previewPath, '.harness', 'runs', id, 'run.json'), { runId: id, taskId, status: 'completed', title: taskId });

@@ -66,7 +66,7 @@ async function startServer() {
       HARNESS_PORT: String(port),
       HARNESS_WORKSPACE: workspacePath,
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   });
   serverProcess.stdout.on('data', (data) => log(`server: ${data.toString().trim()}`));
@@ -184,7 +184,13 @@ app.whenReady().then(createWindow).catch((error) => {
 });
 
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (app.isQuitting) return;
   app.isQuitting = true;
-  if (serverProcess && !serverProcess.killed) serverProcess.kill();
+  if (serverProcess && serverProcess.exitCode === null && serverProcess.connected) {
+    event.preventDefault();
+    const timer = setTimeout(() => { serverProcess.kill(); app.quit(); }, 6000);
+    serverProcess.once('exit', () => { clearTimeout(timer); app.quit(); });
+    serverProcess.send({ type: 'harness:shutdown' }, (error) => { if (error) { clearTimeout(timer); serverProcess.kill(); app.quit(); } });
+  } else if (serverProcess && !serverProcess.killed) serverProcess.kill();
 });

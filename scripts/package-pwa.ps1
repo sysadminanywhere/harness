@@ -7,6 +7,8 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
 $stage = Join-Path $outputRoot 'harness-lab-pwa'
+$resolvedStage = [IO.Path]::GetFullPath($stage)
+if (-not $resolvedStage.StartsWith($outputRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Release staging directory must stay inside the output directory' }
 
 if (-not $Version) {
   $package = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
@@ -21,7 +23,7 @@ New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 $files = @(
   'index.html', 'style.css', 'app.js', 'board.js', 'project.js', 'planner.js', 'i18n.js',
-  'manifest.json', 'sw.js', 'favicon.svg', 'server.js', 'package.json', 'README.md', 'LICENSE'
+  'manifest.json', 'sw.js', 'favicon.svg', 'server.js', 'codex-bridge.js', 'model-settings.js', 'package.json', 'README.md', 'LICENSE'
 )
 
 foreach ($relativePath in $files) {

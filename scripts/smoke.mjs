@@ -105,12 +105,12 @@ try {
   const cyclicPlan = structuredClone(templateState.plan); cyclicPlan.cards[0].dependencies = [cyclicPlan.cards[1].id]; cyclicPlan.cards[1].dependencies = [cyclicPlan.cards[0].id];
   const cycleResponse = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/plan`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cyclicPlan) });
   if (cycleResponse.status !== 400) throw new Error('Dependency cycle was accepted');
-  const taskRequest = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-task', title: 'Executor contract', executor: 'powershell', plan: [{ id: 'plan-api', title: 'Implement API', description: 'Create the endpoint' }, { id: 'plan-tests', title: 'Add tests', dependsOn: ['plan-api'] }] }) });
-  if (taskRequest.executor !== 'powershell') throw new Error('Executor contract is missing from task request');
-  const duplicateActiveTask = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-task', title: 'Executor contract', executor: 'powershell' }) });
+  const taskRequest = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-task', title: 'Executor contract', executor: 'ide', plan: [{ id: 'plan-api', title: 'Implement API', description: 'Create the endpoint' }, { id: 'plan-tests', title: 'Add tests', dependsOn: ['plan-api'] }] }) });
+  if (taskRequest.executor !== 'ide') throw new Error('Executor contract is missing from task request');
+  const duplicateActiveTask = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'smoke-task', title: 'Executor contract', executor: 'ide' }) });
   if (!duplicateActiveTask.duplicate || duplicateActiveTask.runId !== taskRequest.runId) throw new Error('Duplicate active task created a second run');
   const taskState = await request(`/api/projects/${temporaryProject.id}/state`);
-  if (taskState.status?.executor !== 'powershell') throw new Error('Executor contract is missing from status');
+  if (taskState.status?.executor !== 'ide') throw new Error('Executor contract is missing from status');
   if (!taskState.currentTask.includes('## План') || !taskState.currentTask.includes('[plan:plan-api] Implement API') || !taskState.currentTask.includes('```json') || !taskState.currentTask.includes('"id": "plan-api"') || !taskState.currentTask.includes('plan-tests')) throw new Error('LLM plan was not written to current-task.md');
   const firstClaim = await request(`/api/projects/${temporaryProject.id}/claim`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'claim-demo', claimedBy: 'agent-a' }) });
   if (firstClaim.claimedBy !== 'agent-a') throw new Error('Task claim was not recorded');
@@ -121,11 +121,11 @@ try {
   await request(`/api/projects/${temporaryProject.id}/release`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'claim-demo', claimedBy: 'agent-a' }) });
   const reclaimed = await request(`/api/projects/${temporaryProject.id}/claim`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'claim-demo', claimedBy: 'agent-b' }) });
   if (reclaimed.claimedBy !== 'agent-b') throw new Error('Released task could not be reclaimed');
-  const queuedRequest = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'queued-task', title: 'Queued executor task', executor: 'cli', description: 'Queue contract', criteria: ['Queue is visible'] }) });
-  if (!queuedRequest.queued || queuedRequest.selectedExecutor !== 'cli') throw new Error('Executor queue did not retain the requested executor');
-  const duplicateQueued = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'queued-task', title: 'Queued executor task', executor: 'cli' }) });
+  const queuedRequest = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'queued-task', title: 'Queued executor task', executor: 'ide', description: 'Queue contract', criteria: ['Queue is visible'] }) });
+  if (!queuedRequest.queued || queuedRequest.selectedExecutor !== 'ide') throw new Error('Executor queue did not retain the requested executor');
+  const duplicateQueued = await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'queued-task', title: 'Queued executor task', executor: 'ide' }) });
   if (!duplicateQueued.duplicate || (await request(`/api/projects/${temporaryProject.id}/queue`)).filter((item) => item.taskId === 'queued-task').length !== 1) throw new Error('Duplicate queued task was accepted');
-  await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'priority-task', title: 'Priority executor task', executor: 'cli', priority: 'high', dueDate: '2026-10-25' }) });
+  await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'priority-task', title: 'Priority executor task', executor: 'ide', priority: 'high', dueDate: '2026-10-25' }) });
   const queue = await request(`/api/projects/${temporaryProject.id}/queue`);
   if (queue.length !== 2 || !queue.some((item) => item.taskId === 'queued-task') || !queue.some((item) => item.taskId === 'priority-task')) throw new Error('Executor queue is missing the tasks');
   const staleControl = await fetch(`${baseUrl}/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: 'old-task', action: 'pause' }) });
@@ -184,7 +184,11 @@ try {
   const recovered = await request(`/api/projects/${temporaryProject.id}/state`);
   if (!recovered.health?.warnings?.some((warning) => warning.startsWith('plan.json:')) || !recovered.plan?.columns?.length) throw new Error('Corrupted JSON recovery warning is missing');
 } finally {
-  if (temporaryProject) await request(`/api/projects/${temporaryProject.id}`, { method: 'DELETE' });
+  if (temporaryProject) {
+    const cleanup = await request(`/api/projects/${temporaryProject.id}/state`);
+    for (const run of [...cleanup.queue, ...(['working', 'paused'].includes(cleanup.status.status) ? [cleanup.status] : [])]) await request(`/api/projects/${temporaryProject.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: run.taskId, runId: run.runId, action: 'cancel' }) });
+    await request(`/api/projects/${temporaryProject.id}`, { method: 'DELETE' });
+  }
   if (policyProject) await request(`/api/projects/${policyProject.id}`, { method: 'DELETE' });
   if (policyPath) fs.rmSync(policyPath, { recursive: true, force: true });
   for (const project of temporaryTemplateProjects) await request(`/api/projects/${project.id}`, { method: 'DELETE' });

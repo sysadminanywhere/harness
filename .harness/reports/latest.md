@@ -1,3 +1,61 @@
+# Работа Harness по целевому сценарию — проверено
+
+Исправлены оставшиеся расхождения очереди, автоматики, файлового моста, сохранений и импорта с требованиями. Главное: старый демонстрационный экран удалён; «Исполнение», боковая история и «Новый план» работают с реальными проектными данными. Полные результаты: docs/WORKFLOW_CORRECTIONS.md.
+
+Проверки PASS: npm test (22 unit/model/bridge tests, smoke/runtime/controls/models, 21 audit-сценарий); HARNESS_BROWSER_CONTROLS_OK; HARNESS_BROWSER_MODELS_OK; HARNESS_BROWSER_AUDIT_OK; HARNESS_BROWSER_WORKFLOWS_OK (6 сценариев); HARNESS_BROWSER_EXECUTION_OK (6 сценариев). Последние UI-probes: JS errors 0. Просмотрены desktop/mobile макеты монитора. Собраны NSIS installer, portable, Windows unpacked и PWA; HARNESS_PACKAGED_RUNTIME_OK на итоговом unpacked из каталога установщиков подтвердил asar/model/npm/IPC runtime.
+
+Дополнительно исправлены: серверный auto-pickup при заблокированной очереди и priority/deadline, dry-run через Retry/auto, работа со старым runId и ошибками файлового моста, fingerprint отчёта, сохранность настроек при reconnect и aliases путей, раздельные очереди сохранений и loading gate, импорт чужих run/approval/auto flags, полноценный CSV, Origin/Host, отсутствие тяжёлых Git/history запросов в idle-worker, защита отсутствующих папок и повреждённого реестра. Цель и ограничения планировщика сохраняются в каждом шаге.
+
+Изменены: app.js, board.js, server.js, project.js, planner.js, i18n.js, index.html, style.css, sw.js, scripts/audit-test.mjs, scripts/browser-workflows-probe.js, scripts/browser-execution-probe.js, README.md, docs/WORKFLOW_CORRECTIONS.md, docs/RELIABILITY_PLAN.md, docs/INTEGRATIONS.md и протокол этого запуска. Предыдущие пользовательские изменения сохранены.
+
+Сервер оставлен на 4173. HCM: ready, runId null, queue 0; прикладные задачи HCM не запускались. Тестовые browser/preview закрываются после проверки. Чистая установка и Linux/macOS не проверялись; установленную ранее desktop-версию нужно обновить новым installer/portable.
+
+# Полный аудит реализации Harness — проверено
+
+Проверены исполнители, очередь, отмена/повтор/восстановление, файловое состояние, настройки, интерфейс и упаковка. Использовались отдельные тестовые проекты. Подробный отчёт: docs/IMPLEMENTATION_AUDIT.md.
+
+Исправлены потеря плана при reconnect, блокировка очереди, очередность фоновых команд и approval, retention активных run, rollback активной задачи, потерянные локальные процессы, неверные входные данные и ошибки файлов. Серверный auto-pickup проверен без браузера. Исправлены сохранения, конфликт формы, импорт связей и ключей, Escape, смена проекта, вывод имён, ручной результат/файловый мост и режим npm в Electron. Восстановление старых sandbox failures ограничено диагностическими событиями: цитата в пользовательском контексте не считается сбоем; собственная ошибочно классифицированная запись восстановлена.
+
+Проверки PASS: npm test (22 unit/model/bridge tests, smoke/runtime/controls/models + 12 audit-сценариев), HARNESS_BROWSER_CONTROLS_OK, HARNESS_BROWSER_MODELS_OK, HARNESS_BROWSER_AUDIT_OK (10 сценариев, JS errors 0), HARNESS_REAL_CONTROLS_OK, HARNESS_REAL_TOOLS_OK, Windows unpacked build и HARNESS_PACKAGED_RUNTIME_OK, PWA zip. Проверены asar, модуль моделей, фактический npm test в Electron Node, IPC shutdown с завершением процесса. NSIS/portable installers, чистая установка, Linux/macOS и полная локализация не проверялись.
+
+Основной сервер обновлён и оставлен на 4173, worker enabled/1500ms. Fresh GET HCM: ready, runId null, queue 0; задачи реализации HCM не запускались. Fresh GET предыдущего отчёта аудита sandbox: completed. Тестовый preview и браузер закрыты.
+
+Изменены: server.js, codex-bridge.js, board.js, project.js, sw.js, electron/main.js, package.json, scripts/package-pwa.ps1, scripts/runtime-test.mjs, scripts/smoke.mjs, scripts/audit-test.mjs, scripts/browser-audit-probe.js, scripts/package-probe.mjs, docs/IMPLEMENTATION_AUDIT.md, docs/ACCEPTANCE.md, README.md и протокол текущего запуска. Предыдущие пользовательские изменения сохранены.
+
+# HCM-35: восстановление окружения — проверено
+
+Системный журнал подтвердил отказ WRITE_DAC на общем D:/Temp в старой HCM-35-попытке. Реальная read-only проверка CodexBridge в D:/GitHub/hcm с индивидуальным TEMP прошла: HARNESS_REAL_TOOLS_OK; sandbox setup errors=[]. Глобальные ACL и sandbox настройки не менялись.
+
+Добавлены обнаружение sandbox failures в MCP-ответах и финальных сообщениях об отказе, а также восстановление старых ложных completed с backup исходных отчётов. Успешное восстановление инструментов и принятие результата пользователем сохраняются.
+
+Проверки: npm test PASS — 22 unit/model/bridge tests, HARNESS_SMOKE_OK, HARNESS_RUNTIME_OK, HARNESS_MODELS_OK, HARNESS_CONTROLS_OK; реальный CodexBridge probe в HCM — HARNESS_REAL_TOOLS_OK; node --check scripts/probe-codex-tools.cjs; git diff --check. Probe run: tools-probe-1792945859323, Windows sandbox errors=[].
+
+Основной сервер обновлён на 4173. Fresh GET HCM подтвердил status failed, HCM-35 blocked, report failed и событие codex_false_completion_recovered для run-1792944365490-f3db5918. Это исправление статуса не является реализацией HCM-35. Повторная реализация HCM в рамках диагностики не запускалась.
+
+Изменены: codex-bridge.js, server.js, scripts/codex-bridge.test.cjs, scripts/runtime-test.mjs, scripts/probe-codex-tools.cjs, README.md и .harness-протокол текущей задачи. Исходные сообщения и отчёт HCM сохранены, ошибочный completed исправлен штатным восстановлением.
+
+# Выбор модели для задач и групп — проверено
+
+Добавлен выбор модели в настройках проекта, редакторе глобальной группы и редакторе отдельной карточки. Наследование: задача → ближайшая родительская группа → проект → конфигурация Codex. Пустой выбор означает наследование. Список берётся из локального каталога Codex (без раскрытия данных аккаунта); доступен ввод произвольного корректного ID. Доступ к модели окончательно проверяет Codex, список может быть кэшированным.
+
+Модель и источник сохраняются в запросе, очереди, run/input, runtime status, отчёте и истории. Codex получает --model отдельным аргументом. Очередь и Resume сохраняют выбранную модель попытки; Retry использует текущие настройки задачи. Смена модели у карточки во время работы влияет на следующую попытку, badge продолжает показывать модель активного run. Старые проекты без модели используют прежнюю конфигурацию Codex.
+
+## Проверки
+
+- npm test: PASS — 20 unit/bridge/model tests, HARNESS_SMOKE_OK, HARNESS_RUNTIME_OK, HARNESS_MODELS_OK, HARNESS_CONTROLS_OK.
+- API: task/scope/project/default наследование, pin для очереди и resume, retry с новой настройкой, частичное сохранение проекта и fresh GET, запись project.json, валидация и сохранность после ошибочного обновления.
+- Проверены циклические родители, каталог с сокрытием identity, обработка некорректной внешней записи model без падения сервера, CLI --model и отсутствие флага при default.
+- Playwright: HARNESS_BROWSER_MODELS_OK — настройки проекта, группа, override карточки, reload, фактические run.model/run.input.model, pin во время редактирования, модель после Retry. JS errors 0. Макет настроек проверен на screenshot.
+- Исправлен найденный браузером дефект: ответ PUT plan теперь включает вычисленные поля, чтобы сразу после сохранения не терялась модель активной попытки.
+- MODEL_PACKAGE_CONFIG_OK: новый model-settings.js включён в Electron files/asarUnpack и PWA-список зависимостей; добавлен отсутствовавший в PWA codex-bridge.js. Новые установщики не собирались.
+- Основной сервер обновлён на 4173 после проверки отсутствия активной HCM-попытки; её завершённый runId сохранён. GET /api/models возвращает 7 видимых моделей, GET HCM state корректен, существующие настройки моделей в HCM не менялись.
+
+## Изменённые файлы
+
+`model-settings.js`, `server.js`, `codex-bridge.js`, `board.js`, `style.css`, `sw.js`, `package.json`, `scripts/package-pwa.ps1`, `scripts/model-settings.test.cjs`, `scripts/codex-bridge.test.cjs`, `scripts/controls-test.mjs`, `scripts/browser-models-probe.js`, `README.md` и `.harness`-протокол этого запуска.
+
+Документация --model сверена с https://learn.chatgpt.com/docs/developer-commands?surface=cli. Расшифровка: `.harness/runs/run-task-model-selection-20261025/messages.jsonl`.
+
 # Повторный запуск и среда — проверено
 
 После первого настоящего старта выявлен второй дефект: Windows sandbox не мог выдать WRITE_DAC на общий D:/Temp. CLI при этом вышел с кодом 0, что ошибочно считалось completed. Добавлены индивидуальные TEMP/TMP внутри каталога run и распознавание системных setup failures при нулевом коде. Sandbox не отключён, глобальные ACL/настройки не менялись.
@@ -319,3 +377,17 @@ Codex-мост теперь записывает промежуточный пр
 - Добавлен smoke-тест для повторной отправки активной задачи; проверка задвоения queued-задачи уже выполнялась и сохранена.
 - Проверки: `npm test`, `git diff --check`.
 - Изменены файлы: `server.js`, `scripts/smoke.mjs`.
+
+## Исправлена drop-зона доски
+
+- Причина: CSS принудительно задавал 7 колонок, хотя текущий план содержит 6. Из-за этого последняя колонка визуально уезжала вправо, а перенос карточки в соседнюю колонку становился неочевидным.
+- Количество колонок теперь задаётся из `plan.columns`; тело каждой колонки растягивается на доступную высоту и остаётся полноценной drop-зоной.
+- Проверки: `npm test`, `git diff --check`, `node --check board.js`.
+- Изменены файлы: `board.js`, `style.css`.
+
+## Увеличена высота drop-зоны
+
+- Уточнение пользователя подтвердило, что проблема была в высоте: колонка заканчивалась раньше доступной области доски.
+- Минимальная высота колонок теперь учитывает высоту окна (`max(410px, calc(100vh - 260px))`), при этом мобильное правило сохраняет компактный режим.
+- Проверки: `npm test`, `node --check board.js`, `git diff --check`.
+- Изменён файл: `style.css`.

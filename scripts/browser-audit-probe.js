@@ -1,0 +1,74 @@
+// Use after browser-controls/models probes on controls-test.mjs --preview.
+(async (page) => {
+  const errors = []; page.on('pageerror', (error) => errors.push(error.message));
+  const getState = async () => (await page.request.get(new URL('/api/projects/browser-controls/state', page.url()).href)).json();
+  const initial = await getState(); initial.plan.cards = initial.plan.cards.filter((card) => !card.id.startsWith('rapid-save-') && !card.title.startsWith('Imported audit'));
+  await page.request.put(new URL('/api/projects/browser-controls/plan', page.url()).href, { data: initial.plan });
+  await page.reload(); await page.locator('[data-card-id="ui-return"]').waitFor();
+  await page.evaluate(async () => {
+    const make = (id) => ({ id, title: id, status: 'inbox', executor: 'ide', priority: 'medium', criteria: ['Verified'] });
+    boardState.data.cards.push(make('rapid-save-one')); const first = saveBoard();
+    boardState.data.cards.push(make('rapid-save-two')); const second = saveBoard();
+    await Promise.all([first, second]); renderBoard();
+  });
+  let s = await getState();
+  if (!s.plan.cards.some((c) => c.id === 'rapid-save-one') || !s.plan.cards.some((c) => c.id === 'rapid-save-two')) throw new Error('Rapid saves lost a card');
+  await page.locator('[data-card-id="rapid-save-one"] .card-menu').click();
+  await page.locator('#card-title').fill('Draft survives conflict');
+  const external = await getState(); external.plan.cards.find((c) => c.id === 'rapid-save-two').description = 'Changed in another tab';
+  const put = await page.request.put(new URL('/api/projects/browser-controls/plan', page.url()).href, { data: external.plan }); if (!put.ok()) throw new Error('External edit failed');
+  await page.locator('#save-card').click();
+  await page.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('План изменён'));
+  await page.waitForFunction(() => !document.querySelector('#save-card').disabled);
+  if (!(await page.locator('#card-dialog').isVisible()) || await page.locator('#card-title').inputValue() !== 'Draft survives conflict') throw new Error('Conflict discarded form');
+  await page.locator('#save-card').click(); await page.locator('#card-dialog').waitFor({ state: 'hidden' });
+  s = await getState(); if (s.plan.cards.find((c) => c.id === 'rapid-save-one').title !== 'Draft survives conflict' || s.plan.cards.find((c) => c.id === 'rapid-save-two').description !== 'Changed in another tab') throw new Error('Conflict retry overwrote external change');
+  const preview = page.evaluate(() => showPlanPreview(['Escape test']));
+  await page.locator('.plan-preview-dialog').waitFor(); await page.keyboard.press('Escape');
+  if (await preview !== false) throw new Error('Escape did not resolve plan preview');
+  const keys = await page.evaluate(() => { const md = '## План\n- [ ] First\n- [ ] Second\n'; return [parseTaskPlan(md), parseTaskPlan(md)]; });
+  if (JSON.stringify(keys[0]) !== JSON.stringify(keys[1])) throw new Error('Legacy plan IDs are unstable');
+  const imported = { cards: [{ id: 'source-parent', title: 'Imported audit scope', isGlobal: true, status: 'inbox' }, { id: 'source-child', title: 'Imported audit child', parentId: 'source-parent', dependencies: ['source-dependency'], status: 'ready' }, { id: 'source-dependency', title: 'Imported audit dependency', status: 'ready' }] };
+  await page.locator('input[type="file"]').setInputFiles({ name: 'audit.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported)) });
+  await page.waitForFunction(() => boardState.data.cards.some((c) => c.title === 'Imported audit child'));
+  await page.waitForFunction(() => pendingSaves === 0);
+  s = await getState(); const child = s.plan.cards.find((c) => c.title === 'Imported audit child');
+  if (child.parentId !== s.plan.cards.find((c) => c.title === 'Imported audit scope').id || child.dependencies[0] !== s.plan.cards.find((c) => c.title === 'Imported audit dependency').id) throw new Error('Import lost parent/dependency links');
+  await page.reload(); await page.locator('[data-card-id="rapid-save-one"]').waitFor();
+  const previewProject = (await (await page.request.get(new URL('/api/projects', page.url()).href)).json()).find((project) => project.id === 'browser-controls');
+  const literalName = '<Audit & literal>';
+  const created = await page.request.post(new URL('/api/projects', page.url()).href, { data: { name: literalName, path: previewProject.path + '/.harness/reports' } });
+  if (created.ok()) {
+    await page.reload(); await page.locator('[data-card-id="rapid-save-one"]').waitFor();
+    if (!(await page.locator('#project-select option').allTextContents()).includes(literalName)) throw new Error('Project name was interpreted as HTML');
+  }
+  await page.locator('[data-card-id="rapid-save-one"] .card-menu').click();
+  await page.evaluate(async () => { await setActiveProject(projects.find((project) => project.id === 'harness')); });
+  if (await page.locator('#card-dialog').isVisible()) throw new Error('Project switch left an editor for another project open');
+  await page.locator('#project-select').selectOption('browser-controls');
+  await page.locator('[data-card-id="rapid-save-one"]').waitFor();
+  await page.locator('[data-card-id="rapid-save-one"] .card-menu').click(); await page.locator('#card-status').selectOption('ready');
+  await page.locator('#save-card').click(); await page.locator('#card-dialog').waitFor({ state: 'hidden' });
+  await page.locator('[data-card-id="rapid-save-one"] [data-run-id]').click();
+  await page.locator('.board-column[data-status="working"] [data-card-id="rapid-save-one"]').waitFor();
+  await page.evaluate(() => { window.auditOriginalPrompt = window.prompt; window.prompt = () => 'Manual audit result and checks verified.'; });
+  await page.locator('[data-card-id="rapid-save-one"] [data-action="submit"]').click();
+  await page.locator('.board-column[data-status="review"] [data-card-id="rapid-save-one"]').waitFor();
+  await page.evaluate(() => { window.prompt = window.auditOriginalPrompt; delete window.auditOriginalPrompt; });
+  await page.locator('[data-card-id="rapid-save-one"] [data-action="complete"]').click();
+  await page.locator('.board-column[data-status="done"] [data-card-id="rapid-save-one"]').waitFor();
+  const allProjects = await (await page.request.get(new URL('/api/projects', page.url()).href)).json();
+  const projectListUrl = new URL('/api/projects', page.url()).href;
+  await page.route(projectListUrl, (route) => route.request().method() === 'GET' ? route.fulfill({ json: allProjects.filter((project) => project.id === 'harness') }) : route.continue());
+  await page.evaluate(() => { localStorage.removeItem('harness-onboarding-complete'); localStorage.setItem('harness-project', 'harness'); });
+  await page.reload(); await page.locator('#onboarding-dialog').waitFor();
+  await page.locator('#onboarding-create').click(); await page.locator('#project-dialog').waitFor();
+  await page.locator('#project-name').fill('Onboarding audit project');
+  await page.locator('#project-path').fill(previewProject.path + '/.harness/backups');
+  await page.locator('#project-form button[value="default"]').click(); await page.locator('#project-dialog').waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => boardState.project?.name === 'Onboarding audit project');
+  await page.unroute(projectListUrl); await page.reload();
+  await page.locator('#project-select').selectOption('browser-controls'); await page.locator('[data-card-id="rapid-save-one"]').waitFor();
+  if (errors.length) throw new Error(errors.join('\n'));
+  return { result: 'HARNESS_BROWSER_AUDIT_OK', checks: ['serialized rapid saves', 'two-tab conflict retains draft and external edit', 'Escape resolves preview', 'stable legacy plan IDs', 'import preserves hierarchy and dependencies', 'reload persistence', 'project names rendered as text', 'project switch closes stale editor', 'manual result submitted and accepted', 'first-run onboarding and project connection through form'], errors };
+})
