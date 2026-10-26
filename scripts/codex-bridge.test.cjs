@@ -31,6 +31,7 @@ function fixture(options = {}) {
   let current = 'run-1';
   const bridge = new CodexBridge({
     prepareEnvironment: () => ({ ...process.env }),
+    findCodex: () => 'codex-test-fixture',
     spawnProcess: () => child, startupTimeoutMs: 10000,
     terminateProcess: () => { result.killed++; },
     isCurrent: (_, id) => id === current,

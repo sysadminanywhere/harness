@@ -74,8 +74,8 @@ function terminateProcessTree(child) {
 }
 
 class CodexBridge {
-  constructor({ appendEvent, updateStatus, updateProgress, finishRun, isCurrent = () => true, spawnProcess = spawn, startupTimeoutMs = Number(process.env.HARNESS_CODEX_START_TIMEOUT_MS || 30000), terminateProcess, prepareEnvironment = prepareCodexEnvironment }) {
-    Object.assign(this, { appendEvent, updateStatus, updateProgress, finishRun, isCurrent, spawnProcess, startupTimeoutMs, prepareEnvironment });
+  constructor({ appendEvent, updateStatus, updateProgress, finishRun, isCurrent = () => true, spawnProcess = spawn, findCodex: resolveCodex = findCodex, startupTimeoutMs = Number(process.env.HARNESS_CODEX_START_TIMEOUT_MS || 30000), terminateProcess, prepareEnvironment = prepareCodexEnvironment }) {
+    Object.assign(this, { appendEvent, updateStatus, updateProgress, finishRun, isCurrent, spawnProcess, findCodex: resolveCodex, startupTimeoutMs, prepareEnvironment });
     this.active = new Map();
     this.terminateProcess = terminateProcess || terminateProcessTree;
   }
@@ -94,7 +94,7 @@ class CodexBridge {
     if (this.active.has(project.path)) throw new Error('Previous Codex process is still running');
     const model = normalizeModel(input.model);
     const args = ['exec', '--json', ...(model ? ['--model', model] : []), '--cd', project.path, '--sandbox', 'workspace-write', '--thread-source', 'harness', ...(input.resumeThreadId ? ['resume', input.resumeThreadId] : []), prompt];
-    const child = this.spawnProcess(findCodex(), args, { cwd: project.path, env: this.prepareEnvironment(project, run), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = this.spawnProcess(this.findCodex(), args, { cwd: project.path, env: this.prepareEnvironment(project, run), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let buffer = '';
     let threadId = null;
     let finished = false;
